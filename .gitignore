@@ -3,3 +3,4 @@ arc_games/
 __pycache__/
 *.pyc
 patch_notebook_readme.py
+snaps/

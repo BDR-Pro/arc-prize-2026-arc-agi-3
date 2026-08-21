@@ -111,6 +111,21 @@ persistent multi-target task memory. Snapshot tool: snapshots.py; the
 mechanisms tried (react-interact, small-object rare rule, overlap
 arrival) all FAILED multi-seed -- keep the insight, not the code.
 
+**ZERO-GAME CENSUS (visual, via snapshots.py)** — capability wish-list,
+to be prioritized by private-set telemetry:
+1. INSTRUCTIONS-ON-SCREEN family: sk48 (bottom legend shows required
+   visit ORDER for a path-drawing cursor), dc22 (right half shows outlined
+   template shapes to build from left-half pieces), tn36 (0/1 indicator
+   strip + confirm button). Needs: read goal from a screen region,
+   execute. Biggest family.
+2. COLLECT-WITH-INTERACTION: wa30 (enter target from below -> highlight
+   -> A5). Needs approach-direction learning + interact-while-highlighted.
+3. LOCK-AND-KEY: ka59 (two rooms, dark door in corridor, yellow goal
+   pads), ls20 deeper levels. Needs multi-stage objectives.
+4. Others: re86 multi-cursor alignment; sc25 gravity; tr87 unknown
+   (283-state graph fully explored, no score); lf52/sb26/su15 click
+   sequences.
+
 AUTO-SUBMIT: Windows scheduled task "KaggleArcSubmit" fires 03:01 local
 (00:01 UTC Aug 22) running submit_kernel.cmd -> submits kernel v8 via CLI
 (PC must be ON). A persistent monitor polls for the new submission+score.
