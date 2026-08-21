@@ -94,6 +94,14 @@ the gallery from the notebook embed since Kaggle has no media files).
 LB fact: submission 2026-08-21 01:58 (v9 agent!) scored 0.17 public.
 Daily quota resets 00:00 UTC — submit kernel v7 (v48) after reset.
 
+| **v54 = champion (kernel v8, SUBMIT THIS)** | =v51 (verified salt0) | =v51 | + rerun TELEMETRY: [MYA] lines in the submission log = diagnostics from the 110 private games |
+| v55 | 18/21/21 = 60 | avg 0.240 | copy-task two-region mismatch tier -- SHELVED (never fires locally, -2 levels; revisit if telemetry shows copy tasks) |
+
+AUTO-SUBMIT: Windows scheduled task "KaggleArcSubmit" fires 03:01 local
+(00:01 UTC Aug 22) running submit_kernel.cmd -> submits kernel v8 via CLI
+(PC must be ON). A persistent monitor polls for the new submission+score.
+LEADERBOARD CONTEXT (2026-08-21): #1 = 3.57. User target: LB 10.
+
 Kernel-push rule refined: push a new kernel version only when champion
 BEHAVIOR changes locally; git commit+push on every adoption.
 
