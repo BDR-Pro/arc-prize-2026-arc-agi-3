@@ -115,7 +115,7 @@ from agents.agent import Agent
 MAX_ACTIONS_PER_GAME = 4000     # generous budget; completing levels beats efficiency
 NOOP_SKIP_THRESHOLD = 2        # times an action must no-op before we skip it
 STUCK_WINDOW = 50              # actions with no new state before we force reset
-MAX_COMPLEX_PER_STATE = 24
+MAX_COMPLEX_PER_STATE = 48
 MOMENTUM_CAP = 60              # max consecutive repeats of one action
 FIXATION_WINDOW = 200          # look-back for action-fixation detection
 FIXATION_SHARE = 0.85          # one action dominating window w/o score-up
@@ -1210,19 +1210,8 @@ class MyAgent(Agent):
             return self.rng.choice(non_deadly)
         complex_avail = [a for a in available if a.is_complex()]
         if complex_avail:
-            # fallback clicks skip known-dead contexts instead of blind
-            # uniform sampling
-            grid = getattr(self, "_cur_grid", None)
-            ctx_g = self.mem.click_ctx_good
-            ctx_b = self.mem.click_ctx_bad
-            for _ in range(10):
-                x, y = self.rng.randrange(64), self.rng.randrange(64)
-                if grid and 0 <= y < len(grid) and 0 <= x < len(grid[0]):
-                    ctx = (x, y, grid[y][x])
-                    if ctx_g.get(ctx, 0) == 0 and ctx_b.get(ctx, 0) >= 4:
-                        continue
-                break
-            return ActionKey(complex_avail[0], x, y)
+            return ActionKey(complex_avail[0],
+                             self.rng.randrange(64), self.rng.randrange(64))
         pool = [a for a in available if a is not GameAction.RESET] or \
             [GameAction.ACTION1]
         return ActionKey(self.rng.choice(pool))

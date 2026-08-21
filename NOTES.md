@@ -64,7 +64,13 @@ Kaggle (username: baderalotaibi11).**
 | v45 | 18/20/21 = 59 | 0.206/0.100/**0.410** = avg 0.239 | CONTEXTUAL dead-click rules keyed (x, y, shown color) — mean +68%; lp85 salt2 = 8.70 (L1 28 acts vs baseline 17, L5 56 vs 41). First mechanism whose mean gain comes from the intended causal path. |
 | v46 | 16/17/18 = 51 | avg 0.198 | + precision tier0 + repeat-click — REJECTED |
 | v47 | 18/17/12 = 47 | avg 0.214 | precision tier0 alone — REJECTED (any click-order de-randomization costs levels; the shuffle earns its keep) |
-| **v48 = champion (kernel v7, git)** | 18/22/22 = **62** | 0.206/0.101/0.410 = avg 0.239 | v45 + click-only per-state cap 96→192 (deeper sweeps pay once dead-context pruning cleans the lists) — best of both axes |
+| v48 | 18/22/22 = **62** | 0.206/0.101/0.410 = avg 0.239 | v45 + click-only per-state cap 96→192 (deeper sweeps pay once dead-context pruning cleans the lists) — best of both axes |
+| v49 | 19/18/20 = 57 | avg 0.239 | mixed-game cap 48 — REJECTED (keyboard budget crowded out) |
+| v50 | =v48 | =v48 | click-only cap 288 — never binds past 192, dropped |
+| **v51 = champion (kernel v7 carries v48≡v51)** | =v48 | =v48 | + fallback clicks skip dead contexts (identical locally, better prior) |
+
+Kernel-push rule refined: push a new kernel version only when champion
+BEHAVIOR changes locally; git commit+push on every adoption.
 
 ## Git repo rule (STANDING)
 

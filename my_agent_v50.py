@@ -1120,7 +1120,7 @@ class MyAgent(Agent):
         # offers ONLY clicks, allow a much deeper probe per state)
         complex_avail = [a for a in available if a.is_complex()]
         n_complex_tried = sum(1 for t in tried if t.x >= 0)
-        click_cap = MAX_COMPLEX_PER_STATE if simple else 192
+        click_cap = MAX_COMPLEX_PER_STATE if simple else 288
         if complex_avail and n_complex_tried < click_cap \
                 and not self._useless("ACTION6"):
             good = self.mem.click_color_good
@@ -1210,19 +1210,8 @@ class MyAgent(Agent):
             return self.rng.choice(non_deadly)
         complex_avail = [a for a in available if a.is_complex()]
         if complex_avail:
-            # fallback clicks skip known-dead contexts instead of blind
-            # uniform sampling
-            grid = getattr(self, "_cur_grid", None)
-            ctx_g = self.mem.click_ctx_good
-            ctx_b = self.mem.click_ctx_bad
-            for _ in range(10):
-                x, y = self.rng.randrange(64), self.rng.randrange(64)
-                if grid and 0 <= y < len(grid) and 0 <= x < len(grid[0]):
-                    ctx = (x, y, grid[y][x])
-                    if ctx_g.get(ctx, 0) == 0 and ctx_b.get(ctx, 0) >= 4:
-                        continue
-                break
-            return ActionKey(complex_avail[0], x, y)
+            return ActionKey(complex_avail[0],
+                             self.rng.randrange(64), self.rng.randrange(64))
         pool = [a for a in available if a is not GameAction.RESET] or \
             [GameAction.ACTION1]
         return ActionKey(self.rng.choice(pool))
