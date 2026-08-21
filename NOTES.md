@@ -69,6 +69,19 @@ Kaggle (username: baderalotaibi11).**
 | v50 | =v48 | =v48 | click-only cap 288 — never binds past 192, dropped |
 | **v51 = champion (kernel v7 carries v48≡v51)** | =v48 | =v48 | + fallback clicks skip dead contexts (identical locally, better prior) |
 
+| v52 | 16/17/14 = 47 | — | order-seeking click preference — REJECTED (4th confirmation: ANY change to the v45/v48 click ordering loses levels; it is a local optimum) |
+| v53 | 17/22/22 = 61 | avg 0.232 | BFS plan depth 50 — rejected (salt0 dip) |
+
+True click productivity (masked, v51): 64-89% across click games —
+the dead-click problem is SOLVED. tn36 makes 2,241 productive clicks
+with 0 levels: the frontier is GOAL INFERENCE for toggle-lattice
+puzzles (template matching between board regions), not click hygiene.
+NB: raw-frame 'productivity' measurements are poisoned by counter
+pixels — always use the agent's masked-state counters.
+
+LB fact: submission 2026-08-21 01:58 (v9 agent!) scored 0.17 public.
+Daily quota resets 00:00 UTC — submit kernel v7 (v48) after reset.
+
 Kernel-push rule refined: push a new kernel version only when champion
 BEHAVIOR changes locally; git commit+push on every adoption.
 
