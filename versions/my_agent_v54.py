@@ -1466,11 +1466,15 @@ class MyAgent(Agent):
 
     def _telemetry(self, tag: str) -> None:
         try:
+            import time as _t
+            if not hasattr(self, "_t0"):
+                self._t0 = _t.time()
+            el = int(_t.time() - self._t0)
             rc = self._reason_counts
             mix = ",".join(f"{k[:2]}{v}" for k, v in
                            sorted(rc.items(), key=lambda kv: -kv[1])[:6])
             dm = self.avm.direction_map()
-            print(f"[MYA]{tag} g={self.game_id} a={self.action_count} "
+            print(f"[MYA]{tag} g={self.game_id} t={el}s a={self.action_count} "
                   f"lv={self.prev_score} st={len(self.known_states)} "
                   f"av={self.avm.avatar_color()} dm={len(dm)} "
                   f"ph={self.phase} clicks+{sum(self.mem.click_ctx_good.values())}"
