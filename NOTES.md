@@ -97,6 +97,20 @@ Daily quota resets 00:00 UTC — submit kernel v7 (v48) after reset.
 | **v54 = champion (kernel v8, SUBMIT THIS)** | =v51 (verified salt0) | =v51 | + rerun TELEMETRY: [MYA] lines in the submission log = diagnostics from the 110 private games |
 | v55 | 18/21/21 = 60 | avg 0.240 | copy-task two-region mismatch tier -- SHELVED (never fires locally, -2 levels; revisit if telemetry shows copy tasks) |
 
+| v56 | 16/20/22 = 58 | avg 0.243 | react-interact + small-object nav + overlap-arrival -- REJECTED (nav retarget displaces luck) |
+| v57 | 17/12/23 = 52 | -- | react-interact alone -- REJECTED (salt1 collapse) |
+
+**wa30 DECODED (via PNG snapshots + scripted play)**: flying avatar
+(brown, color 14, 3-cell steps), three 12-cell yellow targets. Mechanic:
+targets are SOLID except from below; ENTER one from below -> it
+highlights green (color 3) -> press ACTION5 while highlighted -> target
+consumed. Collect all three (per level, presumably) to score. The stock
+agent collects at most one by luck. Needed capabilities (future):
+approach-direction learning (retry blocked targets from other sides) and
+persistent multi-target task memory. Snapshot tool: snapshots.py; the
+mechanisms tried (react-interact, small-object rare rule, overlap
+arrival) all FAILED multi-seed -- keep the insight, not the code.
+
 AUTO-SUBMIT: Windows scheduled task "KaggleArcSubmit" fires 03:01 local
 (00:01 UTC Aug 22) running submit_kernel.cmd -> submits kernel v8 via CLI
 (PC must be ON). A persistent monitor polls for the new submission+score.
