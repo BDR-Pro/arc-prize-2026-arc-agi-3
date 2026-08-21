@@ -5,6 +5,14 @@ by **baderalotaibi11**. Pure Python, no LLM at runtime, CPU only.
 
 **Current version: v48** (see [Version history](#version-history)).
 
+## See it play
+
+The champion on three of the public games (local runs, real engine):
+
+| lp85 — 5 levels | ls20 — maze + key | vc33 — click puzzle |
+|---|---|---|
+| ![lp85](media/lp85.gif) | ![ls20](media/ls20.gif) | ![vc33](media/vc33.gif) |
+
 ## The problem
 
 ARC-AGI-3 drops the agent into unseen 64×64 grid games with no rules, no
