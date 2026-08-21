@@ -79,6 +79,18 @@ puzzles (template matching between board regions), not click hygiene.
 NB: raw-frame 'productivity' measurements are poisoned by counter
 pixels — always use the agent's masked-state counters.
 
+REPLAY MINING STATUS (2026-08-21 late): user connected the Kaggle MCP
+connector on claude.ai, but connector auth binds at SESSION START -- calls
+from the then-running session stayed Unauthenticated. RETRY
+list_submission_episodes({submissionId: ...}) IN A FRESH SESSION. Note:
+the unauthenticated public endpoint returned zero episodes for the
+submission (private eval games may not expose episodes at all -- verify
+once authenticated before assuming replays exist).
+
+Repo layout: agent versions live in versions/, gameplay GIFs in media/
+(make_gif.py renders them; README links them; build_notebook.py strips
+the gallery from the notebook embed since Kaggle has no media files).
+
 LB fact: submission 2026-08-21 01:58 (v9 agent!) scored 0.17 public.
 Daily quota resets 00:00 UTC — submit kernel v7 (v48) after reset.
 
