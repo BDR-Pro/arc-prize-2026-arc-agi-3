@@ -1,0 +1,359 @@
+{
+  "agent": "C:\\Users\\bader\\Downloads\\kaggle\\my_agent_v48.py",
+  "total_levels": 22,
+  "mean_score": 0.410184,
+  "results": {
+    "cd82": {
+      "game": "cd82",
+      "levels_completed": 1,
+      "win_levels": 6,
+      "actions": 4000,
+      "per_level": [
+        [
+          1,
+          183
+        ]
+      ],
+      "score": 0.4301,
+      "time_s": 45.9,
+      "error": null
+    },
+    "lf52": {
+      "game": "lf52",
+      "levels_completed": 0,
+      "win_levels": 10,
+      "actions": 4000,
+      "per_level": [],
+      "score": 0.0,
+      "time_s": 45.8,
+      "error": null
+    },
+    "cn04": {
+      "game": "cn04",
+      "levels_completed": 1,
+      "win_levels": 6,
+      "actions": 4000,
+      "per_level": [
+        [
+          1,
+          1139
+        ]
+      ],
+      "score": 0.0031,
+      "time_s": 87.4,
+      "error": null
+    },
+    "g50t": {
+      "game": "g50t",
+      "levels_completed": 1,
+      "win_levels": 7,
+      "actions": 4000,
+      "per_level": [
+        [
+          1,
+          2785
+        ]
+      ],
+      "score": 0.0028,
+      "time_s": 134.7,
+      "error": null
+    },
+    "dc22": {
+      "game": "dc22",
+      "levels_completed": 1,
+      "win_levels": 6,
+      "actions": 4000,
+      "per_level": [
+        [
+          1,
+          3922
+        ]
+      ],
+      "score": 0.0011,
+      "time_s": 144.6,
+      "error": null
+    },
+    "ka59": {
+      "game": "ka59",
+      "levels_completed": 0,
+      "win_levels": 7,
+      "actions": 4000,
+      "per_level": [],
+      "score": 0.0,
+      "time_s": 146.5,
+      "error": null
+    },
+    "ft09": {
+      "game": "ft09",
+      "levels_completed": 2,
+      "win_levels": 6,
+      "actions": 4000,
+      "per_level": [
+        [
+          1,
+          728
+        ],
+        [
+          2,
+          2728
+        ]
+      ],
+      "score": 0.0168,
+      "time_s": 149.0,
+      "error": null
+    },
+    "bp35": {
+      "game": "bp35",
+      "levels_completed": 0,
+      "win_levels": 9,
+      "actions": 4000,
+      "per_level": [],
+      "score": 0.0,
+      "time_s": 150.4,
+      "error": null
+    },
+    "lp85": {
+      "game": "lp85",
+      "levels_completed": 5,
+      "win_levels": 8,
+      "actions": 4000,
+      "per_level": [
+        [
+          1,
+          28
+        ],
+        [
+          2,
+          956
+        ],
+        [
+          3,
+          198
+        ],
+        [
+          4,
+          456
+        ],
+        [
+          5,
+          56
+        ]
+      ],
+      "score": 8.6956,
+      "time_s": 153.6,
+      "error": null
+    },
+    "re86": {
+      "game": "re86",
+      "levels_completed": 0,
+      "win_levels": 8,
+      "actions": 4000,
+      "per_level": [],
+      "score": 0.0,
+      "time_s": 26.9,
+      "error": null
+    },
+    "sk48": {
+      "game": "sk48",
+      "levels_completed": 0,
+      "win_levels": 8,
+      "actions": 4000,
+      "per_level": [],
+      "score": 0.0,
+      "time_s": 12.5,
+      "error": null
+    },
+    "ar25": {
+      "game": "ar25",
+      "levels_completed": 2,
+      "win_levels": 8,
+      "actions": 4000,
+      "per_level": [
+        [
+          1,
+          73
+        ],
+        [
+          2,
+          1539
+        ]
+      ],
+      "score": 0.5396,
+      "time_s": 167.4,
+      "error": null
+    },
+    "ls20": {
+      "game": "ls20",
+      "levels_completed": 1,
+      "win_levels": 7,
+      "actions": 4000,
+      "per_level": [
+        [
+          1,
+          525
+        ]
+      ],
+      "score": 0.0063,
+      "time_s": 120.8,
+      "error": null
+    },
+    "m0r0": {
+      "game": "m0r0",
+      "levels_completed": 1,
+      "win_levels": 6,
+      "actions": 4000,
+      "per_level": [
+        [
+          1,
+          652
+        ]
+      ],
+      "score": 0.0101,
+      "time_s": 122.8,
+      "error": null
+    },
+    "sp80": {
+      "game": "sp80",
+      "levels_completed": 1,
+      "win_levels": 6,
+      "actions": 4000,
+      "per_level": [
+        [
+          1,
+          495
+        ]
+      ],
+      "score": 0.0296,
+      "time_s": 19.6,
+      "error": null
+    },
+    "sc25": {
+      "game": "sc25",
+      "levels_completed": 0,
+      "win_levels": 6,
+      "actions": 4000,
+      "per_level": [],
+      "score": 0.0,
+      "time_s": 24.7,
+      "error": null
+    },
+    "r11l": {
+      "game": "r11l",
+      "levels_completed": 1,
+      "win_levels": 6,
+      "actions": 4000,
+      "per_level": [
+        [
+          1,
+          165
+        ]
+      ],
+      "score": 0.0847,
+      "time_s": 85.3,
+      "error": null
+    },
+    "sb26": {
+      "game": "sb26",
+      "levels_completed": 0,
+      "win_levels": 8,
+      "actions": 4000,
+      "per_level": [],
+      "score": 0.0,
+      "time_s": 34.7,
+      "error": null
+    },
+    "s5i5": {
+      "game": "s5i5",
+      "levels_completed": 1,
+      "win_levels": 8,
+      "actions": 4000,
+      "per_level": [
+        [
+          1,
+          1305
+        ]
+      ],
+      "score": 0.0007,
+      "time_s": 38.0,
+      "error": null
+    },
+    "tr87": {
+      "game": "tr87",
+      "levels_completed": 0,
+      "win_levels": 6,
+      "actions": 4000,
+      "per_level": [],
+      "score": 0.0,
+      "time_s": 19.9,
+      "error": null
+    },
+    "tu93": {
+      "game": "tu93",
+      "levels_completed": 2,
+      "win_levels": 9,
+      "actions": 4000,
+      "per_level": [
+        [
+          1,
+          1861
+        ],
+        [
+          2,
+          54
+        ]
+      ],
+      "score": 0.3904,
+      "time_s": 28.8,
+      "error": null
+    },
+    "wa30": {
+      "game": "wa30",
+      "levels_completed": 0,
+      "win_levels": 9,
+      "actions": 4000,
+      "per_level": [],
+      "score": 0.0,
+      "time_s": 27.3,
+      "error": null
+    },
+    "su15": {
+      "game": "su15",
+      "levels_completed": 0,
+      "win_levels": 9,
+      "actions": 4000,
+      "per_level": [],
+      "score": 0.0,
+      "time_s": 41.4,
+      "error": null
+    },
+    "tn36": {
+      "game": "tn36",
+      "levels_completed": 0,
+      "win_levels": 7,
+      "actions": 4000,
+      "per_level": [],
+      "score": 0.0,
+      "time_s": 43.2,
+      "error": null
+    },
+    "vc33": {
+      "game": "vc33",
+      "levels_completed": 2,
+      "win_levels": 7,
+      "actions": 4000,
+      "per_level": [
+        [
+          1,
+          65
+        ],
+        [
+          2,
+          1013
+        ]
+      ],
+      "score": 0.0437,
+      "time_s": 50.2,
+      "error": null
+    }
+  }
+}

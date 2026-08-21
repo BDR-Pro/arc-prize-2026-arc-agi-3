@@ -1,0 +1,5 @@
+# cached ARC game environments (large, downloadable from the ARC API)
+arc_games/
+__pycache__/
+*.pyc
+patch_notebook_readme.py
