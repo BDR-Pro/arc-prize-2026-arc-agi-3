@@ -147,6 +147,23 @@ CERTIFICATION PROTOCOL: iterate at 4k (fast), certify champions at 8k+
 slides to obstruction; goal = push onto hollow-square pad) -- documented,
 capability parked after two failed gated attempts.
 
+AUDIT (2026-08-22, 7-angle multi-agent review): 10 verified findings.
+CRITICAL: (1) plan/plan_expected OFF-BY-ONE -- every multi-step plan since
+v3 aborted after its first action; (2) mask_rev in state hashes orphans
+replay bank + graph on every mask recompute; (3) empty available_actions
+frame permanently pollutes simple_seen (phantom actions); (4) falsy-zero
+`color_at or -1` excludes color-0 objects from click tiers; plus replay
+livelock, death-frame vol pollution, wall-bump uselessness, corridor
+self-masking, desperation gate never reopening after a score, ~2x
+redundant grid scans. ALL fixes implemented in versions/my_agent_v64
+(all 10), v65 (correctness only), v66 (trajectory-safe only) -- BUT
+v64=51, v65=54, v66=52 vs champion 63 @4k: even pure fixes shift the
+luck-coupled trajectories net-negative locally. Champion stays v62.
+LESSON: the 25-game 3-salt metric is saturated by variance (+-5); fixing
+real bugs reads as regression. Next arc needs either many more salts for
+statistical power, or the planner fix paired with better plan TARGETS
+(frontier-chasing may be the true weakness the broken planner was hiding).
+
 Kernel-push rule refined: push a new kernel version only when champion
 BEHAVIOR changes locally; git commit+push on every adoption.
 

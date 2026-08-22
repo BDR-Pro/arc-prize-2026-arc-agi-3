@@ -846,6 +846,8 @@ class MyAgent(Agent):
         self._probe_queue: Optional[deque[str]] = None
         # telemetry
         self._reason_counts: dict[str, int] = {}
+        self._last_s2: Optional[int] = None
+        self._cur_counts: Optional[dict[int, int]] = None
         # reaction flag (desperation-mode interact trigger)
         self._world_reacted = False
         # object-centric navigation
@@ -875,10 +877,8 @@ class MyAgent(Agent):
         import time as _t
         if not hasattr(self, "_t0"):
             self._t0 = _t.time()
-        elif _t.time() - self._t0 > GAME_TIME_CAP_S                 and self.action_count < self.MAX_ACTIONS:
-            # set the ceiling BELOW the current count, once — setting it
-            # equal kept the loop alive forever (counter is one behind)
-            self.MAX_ACTIONS = max(0, self.action_count - 2)
+        elif _t.time() - self._t0 > GAME_TIME_CAP_S:
+            self.MAX_ACTIONS = self.action_count
 
         # -- Reset handling ------------------------------------------------
         if latest_frame.state in (GameState.NOT_PLAYED, GameState.GAME_OVER):
@@ -896,10 +896,12 @@ class MyAgent(Agent):
         self.mem.vol.observe(grid)
         self._learn(latest_frame, died=False)
 
-        s = self._hash(grid)
+        s = self._last_s2 if self._last_s2 is not None else self._hash(grid)
         self._cur_grid = grid
+        self._cur_counts = None
         available = self._available_actions(latest_frame)
-        self._record_available(available)
+        if getattr(latest_frame, "available_actions", None):
+            self._record_available(available)
         self._break_fixation()
 
         # -- Phase reseed: deterministic, but escape long no-progress ruts --
@@ -941,6 +943,7 @@ class MyAgent(Agent):
         if self.replay_queue:
             akey = self.replay_queue.popleft()
             if self._is_legal(akey, available):
+                self.since_new_state = 0
                 return self._emit(akey, s, "replay: known-good prefix")
             self.replay_queue.clear()
 
@@ -1049,9 +1052,11 @@ class MyAgent(Agent):
         return self.mem.vol.hash_grid(grid)
 
     def _learn(self, latest_frame: FrameData, died: bool) -> None:
+        self._last_s2 = None
         if self.prev_state is None or self.prev_action is None:
             return
         s2 = self._hash(_last_layer(latest_frame))
+        self._last_s2 = s2
         # raw (unmasked) effect of the consumed action, for replay pruning
         _cur = _last_layer(latest_frame)
         self.episode_effects.append((not self.prev_grid) or
@@ -1176,6 +1181,7 @@ class MyAgent(Agent):
         self.prev_action = None  # consumed
 
     def _start_episode(self) -> None:
+        self.mem.vol.prev = None
         self.prev_state = None
         self.prev_action = None
         self.episode_actions = []
@@ -1197,15 +1203,7 @@ class MyAgent(Agent):
 
         Goal preference: state with a known score-up action, else nearest
         state with untried actions (frontier). Depth-limited for speed.
-
-        Cost throttle: rebuilding the adjacency index is O(edges) PER
-        CALL; with 10k+ learned states a single plan can take longer
-        than the whole per-game time budget allows. On big graphs, plan
-        only every 8th action (plans are followed multi-step anyway).
         """
-        n_edges = len(self.mem.model.next)
-        if n_edges > 4000 and self.action_count % 8 != 0:
-            return None
         score_states = {ms for (ms, _a) in self.mem.model.score_up}
         parents: dict[int, tuple[int, ActionKey]] = {}
         seen = {start}
@@ -1304,6 +1302,10 @@ class MyAgent(Agent):
                     return grid[y][x]
                 return None
 
+            def color_key(t: tuple[int, int]) -> int:
+                c = color_at(t)
+                return -1 if c is None else c
+
             def dead_color(t: tuple[int, int]) -> bool:
                 c = color_at(t)
                 return c is not None and good.get(c, 0) == 0 \
@@ -1314,20 +1316,20 @@ class MyAgent(Agent):
             # learned from earlier levels apply to CLICKING too.
             centroids = _object_centroids(grid)
             tierG = [t for t in centroids
-                     if (color_at(t) or -1) in self.goal_colors]
+                     if color_key(t) in self.goal_colors]
             tier0 = list(self.mem.good_clicks)
             tierS = _symmetry_break_cells(grid)
             tier1 = [t for t in centroids
-                     if good.get(color_at(t) or -1, 0) > 0 and t not in tierG]
+                     if good.get(color_key(t), 0) > 0 and t not in tierG]
             tier2 = _enclosed_cells(grid) + \
                 [t for t in centroids if t not in tier1 and t not in tierG]
             if self.prev_grid and grid:
                 tier2 += _diff_cells(self.prev_grid, grid)
             self.rng.shuffle(tierG)
             self.rng.shuffle(tier0)
-            tier1.sort(key=lambda t: -(good.get(color_at(t) or -1, 0) + 1)
-                       / (good.get(color_at(t) or -1, 0)
-                          + bad.get(color_at(t) or -1, 0) + 2))
+            tier1.sort(key=lambda t: -(good.get(color_key(t), 0) + 1)
+                       / (good.get(color_key(t), 0)
+                          + bad.get(color_key(t), 0) + 2))
             self.rng.shuffle(tier2)
             tierT: list[tuple[int, int]] = []
             if self._desperate():
@@ -1506,7 +1508,9 @@ class MyAgent(Agent):
                                          list[str]]:
         """One BFS from pos; pick the best-category nearest cell."""
         h, w = len(grid), len(grid[0])
-        counts = _color_counts(grid)
+        if getattr(self, "_cur_counts", None) is None:
+            self._cur_counts = _color_counts(grid)
+        counts = self._cur_counts
         background = max(counts, key=counts.get)  # type: ignore[arg-type]
         avatar_color = self.avm.avatar_color()
         rare = {c for c, n in counts.items()

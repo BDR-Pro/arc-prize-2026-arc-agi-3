@@ -141,8 +141,9 @@ class CellVolatility:
     """
 
     RECOMPUTE_EVERY = 64
-    ROW_RATIO = 0.40          # row/col changing this often is UI (bars)
-    ROW_MIN = 16
+    ROW_RATIO = 0.60          # row/col changing this often is UI (bars);
+    #                           0.40 let an avatar mask its own corridor
+    ROW_MIN = 24
     WARMUP_FRAMES = 32
     # (cell ratio, min changes) per pressure level; raised when the state
     # graph keeps exploding under the current mask
@@ -846,6 +847,8 @@ class MyAgent(Agent):
         self._probe_queue: Optional[deque[str]] = None
         # telemetry
         self._reason_counts: dict[str, int] = {}
+        self._last_s2: Optional[int] = None
+        self._cur_counts: Optional[dict[int, int]] = None
         # reaction flag (desperation-mode interact trigger)
         self._world_reacted = False
         # object-centric navigation
@@ -896,10 +899,17 @@ class MyAgent(Agent):
         self.mem.vol.observe(grid)
         self._learn(latest_frame, died=False)
 
-        s = self._hash(grid)
+        # the masked hash was computed twice per frame (here and in
+        # _learn) -- the single most expensive scan in the file
+        s = self._last_s2 if self._last_s2 is not None else self._hash(grid)
         self._cur_grid = grid
+        self._cur_counts = None  # per-frame color-count cache
         available = self._available_actions(latest_frame)
-        self._record_available(available)
+        # only record actions the FRAME actually offered: recording the
+        # all-actions fallback (empty available_actions) polluted
+        # simple_seen with phantom actions forever
+        if getattr(latest_frame, "available_actions", None):
+            self._record_available(available)
         self._break_fixation()
 
         # -- Phase reseed: deterministic, but escape long no-progress ruts --
@@ -931,9 +941,13 @@ class MyAgent(Agent):
             self._window_start = self.action_count
 
         # -- First frame of an episode: bind start state, load matching replay
+        # Keyed by the RAW (unmasked) grid hash: masked hashes change
+        # identity whenever the volatility mask recomputes, which orphaned
+        # banked prefixes after deaths.
         if self.episode_start_state is None:
-            self.episode_start_state = s
-            banked = self.mem.best_prefix_by_start.get(s)
+            self.episode_start_state = _grid_hash(latest_frame)
+            banked = self.mem.best_prefix_by_start.get(
+                self.episode_start_state)
             if banked:
                 self.replay_queue = deque(banked[1])
 
@@ -941,6 +955,8 @@ class MyAgent(Agent):
         if self.replay_queue:
             akey = self.replay_queue.popleft()
             if self._is_legal(akey, available):
+                # replaying known states must not feed the stuck detector
+                self.since_new_state = 0
                 return self._emit(akey, s, "replay: known-good prefix")
             self.replay_queue.clear()
 
@@ -1029,8 +1045,8 @@ class MyAgent(Agent):
                 self.plan_expected.append(nxt if nxt is not None else -1)
                 cur = nxt if nxt is not None else cur
             akey = self.plan.popleft()
-            if self.plan_expected:
-                self.plan_expected.popleft()
+            # plan_expected stays intact: its head is the predicted RESULT
+            # of this first action, verified on the next frame
             return self._emit(akey, s, "plan: toward goal/frontier")
 
         # -- 6. Nothing new reachable: reset if stuck, else random legal ----
@@ -1049,9 +1065,11 @@ class MyAgent(Agent):
         return self.mem.vol.hash_grid(grid)
 
     def _learn(self, latest_frame: FrameData, died: bool) -> None:
+        self._last_s2 = None
         if self.prev_state is None or self.prev_action is None:
             return
         s2 = self._hash(_last_layer(latest_frame))
+        self._last_s2 = s2  # choose_action reuses this for the same frame
         # raw (unmasked) effect of the consumed action, for replay pruning
         _cur = _last_layer(latest_frame)
         self.episode_effects.append((not self.prev_grid) or
@@ -1129,6 +1147,7 @@ class MyAgent(Agent):
         # interface learning: does this action name ever do anything?
         nm = self.prev_action.name
         if nm != "RESET":
+            has_moves = any(a == nm for (_c, a) in self.avm.stats)
             if s2 != self.prev_state:
                 self.mem.action_effect[nm] += 1
                 self.mem.action_moves[nm] += 1
@@ -1138,7 +1157,9 @@ class MyAgent(Agent):
                         and self._last_transition == (s2, self.prev_state):
                     self.mem.action_revert[nm] += 1
                 self._last_transition = (self.prev_state, s2)
-            else:
+            elif not has_moves:
+                # wall bumps of a proven movement key are expected, not
+                # evidence of uselessness
                 self.mem.action_noop[nm] += 1
         # remember productive clicks + click-color rule induction
         if self.prev_action.x >= 0:
@@ -1176,6 +1197,9 @@ class MyAgent(Agent):
         self.prev_action = None  # consumed
 
     def _start_episode(self) -> None:
+        # the pre-death grid must not be diffed against the fresh spawn:
+        # boundary diffs were polluting volatility statistics
+        self.mem.vol.prev = None
         self.prev_state = None
         self.prev_action = None
         self.episode_actions = []
@@ -1304,6 +1328,12 @@ class MyAgent(Agent):
                     return grid[y][x]
                 return None
 
+            def color_key(t: tuple[int, int]) -> int:
+                # NOT `color_at(t) or -1`: color 0 is falsy and was being
+                # mapped to -1, excluding black objects from every tier
+                c = color_at(t)
+                return -1 if c is None else c
+
             def dead_color(t: tuple[int, int]) -> bool:
                 c = color_at(t)
                 return c is not None and good.get(c, 0) == 0 \
@@ -1314,20 +1344,20 @@ class MyAgent(Agent):
             # learned from earlier levels apply to CLICKING too.
             centroids = _object_centroids(grid)
             tierG = [t for t in centroids
-                     if (color_at(t) or -1) in self.goal_colors]
+                     if color_key(t) in self.goal_colors]
             tier0 = list(self.mem.good_clicks)
             tierS = _symmetry_break_cells(grid)
             tier1 = [t for t in centroids
-                     if good.get(color_at(t) or -1, 0) > 0 and t not in tierG]
+                     if good.get(color_key(t), 0) > 0 and t not in tierG]
             tier2 = _enclosed_cells(grid) + \
                 [t for t in centroids if t not in tier1 and t not in tierG]
             if self.prev_grid and grid:
                 tier2 += _diff_cells(self.prev_grid, grid)
             self.rng.shuffle(tierG)
             self.rng.shuffle(tier0)
-            tier1.sort(key=lambda t: -(good.get(color_at(t) or -1, 0) + 1)
-                       / (good.get(color_at(t) or -1, 0)
-                          + bad.get(color_at(t) or -1, 0) + 2))
+            tier1.sort(key=lambda t: -(good.get(color_key(t), 0) + 1)
+                       / (good.get(color_key(t), 0)
+                          + bad.get(color_key(t), 0) + 2))
             self.rng.shuffle(tier2)
             tierT: list[tuple[int, int]] = []
             if self._desperate():
@@ -1506,7 +1536,9 @@ class MyAgent(Agent):
                                          list[str]]:
         """One BFS from pos; pick the best-category nearest cell."""
         h, w = len(grid), len(grid[0])
-        counts = _color_counts(grid)
+        if getattr(self, "_cur_counts", None) is None:
+            self._cur_counts = _color_counts(grid)
+        counts = self._cur_counts
         background = max(counts, key=counts.get)  # type: ignore[arg-type]
         avatar_color = self.avm.avatar_color()
         rare = {c for c, n in counts.items()
@@ -1754,7 +1786,7 @@ class MyAgent(Agent):
         overlap arrival, copy-task clicks) runs ONLY here — every one of
         these mechanisms helped some stuck game but cost levels when
         allowed to disturb already-working trajectories (v55-v57)."""
-        return self.prev_score == 0 and self.action_count > DESPERATE_AFTER
+        return (self.action_count - self.last_scoreup_at > DESPERATE_AFTER)
 
     def _rc(self, why: str) -> None:
         key = why.split(":")[0]

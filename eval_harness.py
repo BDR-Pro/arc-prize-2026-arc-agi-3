@@ -24,7 +24,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 GAMES_DIR = HERE / "arc_games"
 MAX_ACTIONS = 4000
-PER_GAME_TIMEOUT = 900  # seconds, driver-enforced
+PER_GAME_TIMEOUT = 3600  # seconds, driver-enforced (16k budgets under
+#                            parallel contention need headroom)
 
 
 def _stub_agents_module() -> None:
@@ -118,7 +119,7 @@ def run_game(game: str, agent_path: Path, max_actions: int = MAX_ACTIONS,
     err = None
 
     try:
-        while actions < max_actions and not agent.is_done(frames, latest):
+        while actions < max_actions and not agent.is_done(frames, latest)                 and actions < getattr(agent, "MAX_ACTIONS", 10**9):
             action = agent.choose_action(frames, latest)
             data = None
             if action.is_complex():

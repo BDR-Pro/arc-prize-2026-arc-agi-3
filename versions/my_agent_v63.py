@@ -160,6 +160,14 @@ class CellVolatility:
         self.mask_rev = 0
         self._since = 0
         self.pressure = 0
+        # pulse detection: cell -> (value_a, value_b, alternations).
+        # Cells blinking between exactly two values are animated pickups
+        # or active elements — masked from the state hash but PRIME
+        # navigation targets.
+        self.pulse: dict[tuple[int, int], tuple[int, int, int]] = {}
+
+    def pulse_cells(self, min_alt: int = 6) -> list[tuple[int, int]]:
+        return [c for c, (_a, _b, n) in self.pulse.items() if n >= min_alt]
 
     def raise_pressure(self) -> None:
         if self.pressure < len(self.PRESSURE_LEVELS) - 1:
@@ -182,6 +190,15 @@ class CellVolatility:
                         if a != b:
                             self.change[(x, y)] += 1
                             cols_hit.add(x)
+                            pv = self.pulse.get((x, y))
+                            if pv is None:
+                                self.pulse[(x, y)] = (a, b, 1)
+                            elif {a, b} == {pv[0], pv[1]}:
+                                self.pulse[(x, y)] = (pv[0], pv[1],
+                                                      pv[2] + 1)
+                            else:
+                                # third value seen: not a clean pulse
+                                self.pulse[(x, y)] = (a, b, 0)
             for y in rows_hit:
                 self.row_change[y] += 1
             for x in cols_hit:
@@ -875,10 +892,8 @@ class MyAgent(Agent):
         import time as _t
         if not hasattr(self, "_t0"):
             self._t0 = _t.time()
-        elif _t.time() - self._t0 > GAME_TIME_CAP_S                 and self.action_count < self.MAX_ACTIONS:
-            # set the ceiling BELOW the current count, once — setting it
-            # equal kept the loop alive forever (counter is one behind)
-            self.MAX_ACTIONS = max(0, self.action_count - 2)
+        elif _t.time() - self._t0 > GAME_TIME_CAP_S:
+            self.MAX_ACTIONS = self.action_count
 
         # -- Reset handling ------------------------------------------------
         if latest_frame.state in (GameState.NOT_PLAYED, GameState.GAME_OVER):
@@ -1197,15 +1212,7 @@ class MyAgent(Agent):
 
         Goal preference: state with a known score-up action, else nearest
         state with untried actions (frontier). Depth-limited for speed.
-
-        Cost throttle: rebuilding the adjacency index is O(edges) PER
-        CALL; with 10k+ learned states a single plan can take longer
-        than the whole per-game time budget allows. On big graphs, plan
-        only every 8th action (plans are followed multi-step anyway).
         """
-        n_edges = len(self.mem.model.next)
-        if n_edges > 4000 and self.action_count % 8 != 0:
-            return None
         score_states = {ms for (ms, _a) in self.mem.model.score_up}
         parents: dict[int, tuple[int, ActionKey]] = {}
         seen = {start}
@@ -1582,6 +1589,16 @@ class MyAgent(Agent):
                         goal_set = {c}
                         break
         goal_near = near_set(goal_set)
+        # pulse-cell targeting (desperation): blinking cells are animated
+        # pickups/actives — the volatility mask hides them from the state
+        # hash, but they are exactly where the agent should GO
+        if self._desperate():
+            for (pcx, pcy) in self.mem.vol.pulse_cells():
+                for dy2 in (-1, 0, 1):
+                    for dx2 in (-1, 0, 1):
+                        nx2, ny2 = pcx + dx2, pcy + dy2
+                        if 0 <= nx2 < w and 0 <= ny2 < h:
+                            goal_near.add((nx2, ny2))
         rare_near = near_set(rare)
         if legend_box is not None:
             lx0, ly0, lx1, ly1 = legend_box
