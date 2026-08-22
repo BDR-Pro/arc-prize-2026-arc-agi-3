@@ -131,6 +131,14 @@ AUTO-SUBMIT: Windows scheduled task "KaggleArcSubmit" fires 03:01 local
 (PC must be ON). A persistent monitor polls for the new submission+score.
 LEADERBOARD CONTEXT (2026-08-21): #1 = 3.57. User target: LB 10.
 
+RERUN LOGS ARE HIDDEN for this comp (user verified: only the 28s commit
+log is visible). The DAILY LB SCORE is the only private-set signal ->
+every submission = one controlled experiment. Calibration: LB ~= 1.8 x
+local_mean (v54: local 0.142 -> LB 0.26). Targets: LB 4 = local ~2.2;
+LB 10 = local ~5.5.
+
+| **v58 = champion (kernel v10, daily submit)** | 19/22/22 = **63** | =v54 means | DESPERATION MODE: score==0 && actions>1200 unlocks gated arsenal (react-interact, small-object nav, overlap arrival, copy-task tier); scored games byte-identical. + 8000-action budget wall-clock-capped at 160s/game. THE pattern for risk-free capability adds. |
+
 Kernel-push rule refined: push a new kernel version only when champion
 BEHAVIOR changes locally; git commit+push on every adoption.
 

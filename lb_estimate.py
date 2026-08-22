@@ -26,7 +26,7 @@ import sys
 POINTS = [
     # (local_mean, lb_score)
     (0.004, 0.17),
-    # append (0.142, <score>) after the v54 submission lands
+    (0.142, 0.26),   # v54, 2026-08-22: k collapsed to ~1.8 -- easy-set advantage gone
 ]
 
 

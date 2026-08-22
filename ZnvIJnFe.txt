@@ -1,0 +1,58 @@
+8.8s 1 0.00s - Debugger warning: It seems that frozen modules are being used, which may
+8.8s 2 0.00s - make the debugger miss breakpoints. Please pass -Xfrozen_modules=off
+8.8s 3 0.00s - to python to disable frozen modules.
+8.8s 4 0.00s - Note: Debugging will proceed. Set PYDEVD_DISABLE_FILE_VALIDATION=1 to disable this validation.
+9.6s 5 0.00s - Debugger warning: It seems that frozen modules are being used, which may
+9.6s 6 0.00s - make the debugger miss breakpoints. Please pass -Xfrozen_modules=off
+9.6s 7 0.00s - to python to disable frozen modules.
+9.6s 8 0.00s - Note: Debugging will proceed. Set PYDEVD_DISABLE_FILE_VALIDATION=1 to disable this validation.
+13.8s 9 Looking in links: /kaggle/input/competitions/arc-prize-2026-arc-agi-3/arc_agi_3_wheels
+13.8s 10 Processing /kaggle/input/competitions/arc-prize-2026-arc-agi-3/arc_agi_3_wheels/arc_agi-0.9.8-py3-none-any.whl
+13.8s 11 Requirement already satisfied: python-dotenv in /usr/local/lib/python3.12/dist-packages (1.2.2)
+13.8s 12 Processing /kaggle/input/competitions/arc-prize-2026-arc-agi-3/arc_agi_3_wheels/arcengine-0.9.3-py3-none-any.whl (from arc-agi)
+13.8s 13 Requirement already satisfied: flask>=3.1.0 in /usr/local/lib/python3.12/dist-packages (from arc-agi) (3.1.3)
+13.8s 14 Requirement already satisfied: matplotlib>=3.7.0 in /usr/local/lib/python3.12/dist-packages (from arc-agi) (3.10.0)
+13.9s 15 Requirement already satisfied: pydantic>=2.0.0 in /usr/local/lib/python3.12/dist-packages (from arc-agi) (2.12.3)
+13.9s 16 Processing /kaggle/input/competitions/arc-prize-2026-arc-agi-3/arc_agi_3_wheels/pillow-12.2.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (from arc-agi)
+14.1s 17 Requirement already satisfied: requests>=2.31.0 in /usr/local/lib/python3.12/dist-packages (from arc-agi) (2.32.4)
+14.1s 18 Requirement already satisfied: numpy>=1.24.0 in /usr/local/lib/python3.12/dist-packages (from arcengine>=0.9.3->arc-agi) (2.0.2)
+14.1s 19 Requirement already satisfied: blinker>=1.9.0 in /usr/local/lib/python3.12/dist-packages (from flask>=3.1.0->arc-agi) (1.9.0)
+14.1s 20 Requirement already satisfied: click>=8.1.3 in /usr/local/lib/python3.12/dist-packages (from flask>=3.1.0->arc-agi) (8.3.3)
+14.1s 21 Requirement already satisfied: itsdangerous>=2.2.0 in /usr/local/lib/python3.12/dist-packages (from flask>=3.1.0->arc-agi) (2.2.0)
+14.1s 22 Requirement already satisfied: jinja2>=3.1.2 in /usr/local/lib/python3.12/dist-packages (from flask>=3.1.0->arc-agi) (3.1.6)
+14.1s 23 Requirement already satisfied: markupsafe>=2.1.1 in /usr/local/lib/python3.12/dist-packages (from flask>=3.1.0->arc-agi) (3.0.3)
+14.1s 24 Requirement already satisfied: werkzeug>=3.1.0 in /usr/local/lib/python3.12/dist-packages (from flask>=3.1.0->arc-agi) (3.1.8)
+14.1s 25 Requirement already satisfied: contourpy>=1.0.1 in /usr/local/lib/python3.12/dist-packages (from matplotlib>=3.7.0->arc-agi) (1.3.3)
+14.1s 26 Requirement already satisfied: cycler>=0.10 in /usr/local/lib/python3.12/dist-packages (from matplotlib>=3.7.0->arc-agi) (0.12.1)
+14.1s 27 Requirement already satisfied: fonttools>=4.22.0 in /usr/local/lib/python3.12/dist-packages (from matplotlib>=3.7.0->arc-agi) (4.62.1)
+14.1s 28 Requirement already satisfied: kiwisolver>=1.3.1 in /usr/local/lib/python3.12/dist-packages (from matplotlib>=3.7.0->arc-agi) (1.5.0)
+14.1s 29 Requirement already satisfied: packaging>=20.0 in /usr/local/lib/python3.12/dist-packages (from matplotlib>=3.7.0->arc-agi) (26.1)
+14.1s 30 Requirement already satisfied: pyparsing>=2.3.1 in /usr/local/lib/python3.12/dist-packages (from matplotlib>=3.7.0->arc-agi) (3.3.2)
+14.1s 31 Requirement already satisfied: python-dateutil>=2.7 in /usr/local/lib/python3.12/dist-packages (from matplotlib>=3.7.0->arc-agi) (2.9.0.post0)
+14.1s 32 Requirement already satisfied: annotated-types>=0.6.0 in /usr/local/lib/python3.12/dist-packages (from pydantic>=2.0.0->arc-agi) (0.7.0)
+14.1s 33 Requirement already satisfied: pydantic-core==2.41.4 in /usr/local/lib/python3.12/dist-packages (from pydantic>=2.0.0->arc-agi) (2.41.4)
+14.1s 34 Requirement already satisfied: typing-extensions>=4.14.1 in /usr/local/lib/python3.12/dist-packages (from pydantic>=2.0.0->arc-agi) (4.15.0)
+14.1s 35 Requirement already satisfied: typing-inspection>=0.4.2 in /usr/local/lib/python3.12/dist-packages (from pydantic>=2.0.0->arc-agi) (0.4.2)
+14.1s 36 Requirement already satisfied: charset_normalizer<4,>=2 in /usr/local/lib/python3.12/dist-packages (from requests>=2.31.0->arc-agi) (3.4.7)
+14.1s 37 Requirement already satisfied: idna<4,>=2.5 in /usr/local/lib/python3.12/dist-packages (from requests>=2.31.0->arc-agi) (3.13)
+14.1s 38 Requirement already satisfied: urllib3<3,>=1.21.1 in /usr/local/lib/python3.12/dist-packages (from requests>=2.31.0->arc-agi) (2.5.0)
+14.1s 39 Requirement already satisfied: certifi>=2017.4.17 in /usr/local/lib/python3.12/dist-packages (from requests>=2.31.0->arc-agi) (2026.4.22)
+14.2s 40 Requirement already satisfied: six>=1.5 in /usr/local/lib/python3.12/dist-packages (from python-dateutil>=2.7->matplotlib>=3.7.0->arc-agi) (1.17.0)
+16.6s 41 Installing collected packages: pillow, arcengine, arc-agi
+16.6s 42 Attempting uninstall: pillow
+16.9s 43 Found existing installation: pillow 11.3.0
+16.9s 44 Uninstalling pillow-11.3.0:
+17.1s 45 Successfully uninstalled pillow-11.3.0
+17.7s 46 [31mERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
+17.7s 47 dopamine-rl 4.1.2 requires gym<=0.25.2, but you have gym 0.26.2 which is incompatible.
+17.7s 48 gradio 5.50.0 requires pillow<12.0,>=8.0, but you have pillow 12.2.0 which is incompatible.[0m[31m
+17.7s 49 [0mSuccessfully installed arc-agi-0.9.8 arcengine-0.9.3 pillow-12.2.0
+18.0s 50 Writing /tmp/my_agent.py
+22.7s 51 /usr/local/lib/python3.12/dist-packages/mistune.py:435: SyntaxWarning: invalid escape sequence '\|'
+22.7s 52 cells[i][c] = re.sub('\\\\\|', '|', cell)
+22.9s 53 /usr/local/lib/python3.12/dist-packages/nbconvert/filters/filter_links.py:36: SyntaxWarning: invalid escape sequence '\_'
+22.9s 54 text = re.sub(r'_', '\_', text) # Escape underscores in display text
+23.7s 55 [NbConvertApp] Converting notebook __notebook__.ipynb to notebook
+24.1s 56 [NbConvertApp] Writing 103473 bytes to __notebook__.ipynb
+27.3s 57 [NbConvertApp] Converting notebook __notebook__.ipynb to html
+28.6s 58 [NbConvertApp] Writing 614306 bytes to __results__.html
