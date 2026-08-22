@@ -139,6 +139,14 @@ LB 10 = local ~5.5.
 
 | **v58 = champion (kernel v10, daily submit)** | 19/22/22 = **63** | =v54 means | DESPERATION MODE: score==0 && actions>1200 unlocks gated arsenal (react-interact, small-object nav, overlap arrival, copy-task tier); scored games byte-identical. + 8000-action budget wall-clock-capped at 160s/game. THE pattern for risk-free capability adds. |
 
+| v60 | 57 / 60 gated-push variants | -- | Sokoban-slide push (ka59 archetype) -- REJECTED both variants: even desperation-mode capabilities compete for zero-game recovery budget |
+| **v61 = champion (kernel v12, daily submit)** | 19/22/22=63 @4k; 23/22/23=68 @8k; 25 @12k salt0 | ~same means | v59 + MAX_ACTIONS 16000 (the 160s/game wall cap governs on Kaggle; total <= 4.9h for 110 games). BUDGET CURVE: 4k->63, 8k->68, 12k->75-ish levels -- budget was binding after all at v59 capability level. |
+
+CERTIFICATION PROTOCOL: iterate at 4k (fast), certify champions at 8k+
+(matches kernel behavior). ka59 = sliding-push archetype (bump item ->
+slides to obstruction; goal = push onto hollow-square pad) -- documented,
+capability parked after two failed gated attempts.
+
 Kernel-push rule refined: push a new kernel version only when champion
 BEHAVIOR changes locally; git commit+push on every adoption.
 

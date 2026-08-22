@@ -112,7 +112,7 @@ from agents.agent import Agent
 # --------------------------------------------------------------------------
 # Tunables
 # --------------------------------------------------------------------------
-MAX_ACTIONS_PER_GAME = 16000    # generous budget, wall-clock capped below
+MAX_ACTIONS_PER_GAME = 8000    # generous budget, wall-clock capped below
 GAME_TIME_CAP_S = 160          # per-game wall-clock cap: 110 games must
 #                                fit the Kaggle rerun window; when the cap
 #                                hits, MAX_ACTIONS collapses to the count
@@ -1393,6 +1393,109 @@ class MyAgent(Agent):
             [GameAction.ACTION1]
         return ActionKey(self.rng.choice(pool))
 
+    def _push_action(self, s: int, grid: list[list[int]],
+                     pos: tuple[int, int],
+                     dirmap: dict[str, tuple[int, int]],
+                     available: list[GameAction]) -> Optional[ActionKey]:
+        """Sokoban-slide capability (desperation only): if a second
+        component of the avatar's color exists (a pushable ITEM, ka59)
+        and a hollow-rectangle PAD exists (enclosed pocket), push the
+        item toward the pad. Feedback-driven: push, see where it slid,
+        push again — no slide simulation needed."""
+        h, w = len(grid), len(grid[0])
+        counts = _color_counts(grid)
+        background = max(counts, key=counts.get)  # type: ignore[arg-type]
+        # pushable item = a SOLID small component (any non-background
+        # color) away from the avatar. Solid = fills >=70% of its bbox
+        # (goal-pad outlines are hollow frames and fail this).
+        best_item = None
+        seen: set[tuple[int, int]] = set()
+        for y in range(h):
+            for x in range(w):
+                if (x, y) in seen or grid[y][x] == background:
+                    continue
+                color0 = grid[y][x]
+                stack = [(x, y)]
+                seen.add((x, y))
+                cells: list[tuple[int, int]] = []
+                while stack:
+                    cx, cy = stack.pop()
+                    cells.append((cx, cy))
+                    for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                        nx, ny = cx + dx, cy + dy
+                        if 0 <= nx < w and 0 <= ny < h \
+                                and (nx, ny) not in seen \
+                                and grid[ny][nx] == color0:
+                            seen.add((nx, ny))
+                            stack.append((nx, ny))
+                if not (4 <= len(cells) <= 60):
+                    continue
+                # evidence gate: this color has MOVED under our actions
+                # (a bumped slider votes in avm.stats); without it, the
+                # push mode fired on decor and burned desperation budget
+                if sum(sum(d.values()) for (c2, _a), d
+                       in self.avm.stats.items() if c2 == color0) < 2:
+                    continue
+                xs = [c[0] for c in cells]
+                ys2 = [c[1] for c in cells]
+                bw = max(xs) - min(xs) + 1
+                bh = max(ys2) - min(ys2) + 1
+                if len(cells) < 0.7 * bw * bh:
+                    continue  # hollow frame (a pad), not an item
+                ccx = sum(xs) // len(cells)
+                ccy = sum(ys2) // len(cells)
+                if abs(ccx - pos[0]) <= 3 and abs(ccy - pos[1]) <= 3:
+                    continue  # that's the avatar itself
+                d = abs(ccx - pos[0]) + abs(ccy - pos[1])
+                if best_item is None or d < best_item[0]:
+                    best_item = (d, ccx, ccy)
+        if best_item is None:
+            return None
+        ix, iy = best_item[1], best_item[2]
+        pads = _enclosed_cells(grid)
+        pads = [p for p in pads
+                if abs(p[0] - ix) + abs(p[1] - iy) > 2]
+        if not pads:
+            return None
+        pads.sort(key=lambda p: abs(p[0] - ix) + abs(p[1] - iy))
+        px, py = pads[0]
+        # push direction: primary axis toward the pad
+        ddx, ddy = px - ix, py - iy
+        if abs(ddx) >= abs(ddy):
+            pdir = (1 if ddx > 0 else -1, 0)
+        else:
+            pdir = (0, 1 if ddy > 0 else -1)
+        # the avatar must stand on the OPPOSITE side of the item, then
+        # step into it. Am I already there (roughly aligned behind it)?
+        step = max(max(abs(d[0]), abs(d[1])) for d in dirmap.values())
+        behind = (ix - pdir[0] * (step + 1), iy - pdir[1] * (step + 1))
+        d_behind = abs(pos[0] - behind[0]) + abs(pos[1] - behind[1])
+        if d_behind <= step:
+            # aligned: step INTO the item (the push)
+            for name, d in dirmap.items():
+                if (1 if d[0] > 0 else (-1 if d[0] < 0 else 0),
+                        1 if d[1] > 0 else (-1 if d[1] < 0 else 0)) == pdir:
+                    ak = ActionKey(GameAction[name])
+                    if self._is_legal(ak, available) \
+                            and (s, ak) not in self.mem.model.deadly:
+                        return ak
+            return None
+        # not aligned: navigate toward the behind-cell (greedy step with
+        # perpendicular fallback; full pathing is the nav layer's job)
+        best_name, best_d = None, None
+        for name, d in dirmap.items():
+            nd = abs(pos[0] + d[0] - behind[0]) \
+                + abs(pos[1] + d[1] - behind[1])
+            if best_d is None or nd < best_d:
+                best_d, best_name = nd, name
+        if best_name is not None and best_d is not None \
+                and best_d < d_behind:
+            ak = ActionKey(GameAction[best_name])
+            if self._is_legal(ak, available) \
+                    and (s, ak) not in self.mem.model.deadly:
+                return ak
+        return None
+
     def _nav_action(self, s: int, grid: list[list[int]],
                     available: list[GameAction]) -> Optional[ActionKey]:
         dirmap = self.avm.direction_map()
@@ -1402,6 +1505,13 @@ class MyAgent(Agent):
         if pos is None:
             return None
         self.visited_cells.add(pos)
+        # desperation: Sokoban-slide pushing takes precedence over
+        # ordinary target seeking (every 2nd action, so learning
+        # continues in between)
+        if self._desperate() and self.action_count % 2 == 0:
+            pk = self._push_action(s, grid, pos, dirmap, available)
+            if pk is not None:
+                return pk
         if self.nav_target is not None and pos == self.nav_target:
             # arrived: try every untried non-movement action here before
             # writing the spot off (interaction key varies per game)
