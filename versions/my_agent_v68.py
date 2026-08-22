@@ -846,6 +846,8 @@ class MyAgent(Agent):
         self._probe_queue: Optional[deque[str]] = None
         # telemetry
         self._reason_counts: dict[str, int] = {}
+        self._last_s2: Optional[int] = None
+        self._cur_counts: Optional[dict[int, int]] = None
         # reaction flag (desperation-mode interact trigger)
         self._world_reacted = False
         # object-centric navigation
@@ -899,8 +901,9 @@ class MyAgent(Agent):
         self.mem.vol.observe(grid)
         self._learn(latest_frame, died=False)
 
-        s = self._hash(grid)
+        s = self._last_s2 if self._last_s2 is not None else self._hash(grid)
         self._cur_grid = grid
+        self._cur_counts = None
         available = self._available_actions(latest_frame)
         self._record_available(available)
         self._break_fixation()
@@ -1032,8 +1035,9 @@ class MyAgent(Agent):
                 self.plan_expected.append(nxt if nxt is not None else -1)
                 cur = nxt if nxt is not None else cur
             akey = self.plan.popleft()
-            if self.plan_expected:
-                self.plan_expected.popleft()
+            # plan_expected head = predicted RESULT of this action,
+            # verified next frame (popping it here killed every plan
+            # after one step, since v3)
             return self._emit(akey, s, "plan: toward goal/frontier")
 
         # -- 6. Nothing new reachable: reset if stuck, else random legal ----
@@ -1052,9 +1056,11 @@ class MyAgent(Agent):
         return self.mem.vol.hash_grid(grid)
 
     def _learn(self, latest_frame: FrameData, died: bool) -> None:
+        self._last_s2 = None
         if self.prev_state is None or self.prev_action is None:
             return
         s2 = self._hash(_last_layer(latest_frame))
+        self._last_s2 = s2  # choose_action reuses this for the same frame
         # raw (unmasked) effect of the consumed action, for replay pruning
         _cur = _last_layer(latest_frame)
         self.episode_effects.append((not self.prev_grid) or
@@ -1509,7 +1515,9 @@ class MyAgent(Agent):
                                          list[str]]:
         """One BFS from pos; pick the best-category nearest cell."""
         h, w = len(grid), len(grid[0])
-        counts = _color_counts(grid)
+        if getattr(self, "_cur_counts", None) is None:
+            self._cur_counts = _color_counts(grid)
+        counts = self._cur_counts
         background = max(counts, key=counts.get)  # type: ignore[arg-type]
         avatar_color = self.avm.avatar_color()
         rare = {c for c, n in counts.items()
