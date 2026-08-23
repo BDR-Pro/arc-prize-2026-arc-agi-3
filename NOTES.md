@@ -194,6 +194,17 @@ avg 0.286 -- BEST of campaign, and spread across salts (not one lucky
 lp85). Predicted LB ~0.31. Levels-first championship is DEAD; mean-first
 is the rule now (k~1.1 means local mean IS the LB).
 
+| v71 | 20/19/20 = 59 | 0.407/0.332/0.350 = avg 0.363 | TOP-3 SPEED MECHANISMS: cross-level winning-sequence replay (one-shot at new level), last-win clicks as supreme tier, score-up plans exempt from throttle. +52% mean. (An earlier 0.175 salt0 reading was a STALE-FILE artifact.) |
+| v72 | 22/20/19 = 61 | avg 0.351 | + mismatch-abort of strategy replay -- levels up, mean down, rejected |
+| **v73 = champion (kernel v18, submits 2026-08-24 00:01 UTC)** | 20/22/21 = **63** | 0.406/0.338/0.339 = **avg 0.361** | + finishing-move second stage (last-20 replay) -- robustness back at zero mean cost |
+| v74 | 19/22/20 = 61 | avg 0.361 | + resurrected planner -- neutral, parked |
+| v75/v76 | 16/16/15 = 47 | avg 0.315 | win-click COLOR generalization (all / nearest-2) -- REJECTED, any top-tier addition costs levels |
+
+ITERATION TEMPO (2026-08-23): local mean ~= LB (k~1.1) so iterate locally
+at machine speed; nightly submission is confirmation only. ALWAYS rerun
+suspicious numbers (stale-file artifacts happen when evals launch
+while files are mid-edit).
+
 Kernel-push rule refined: push a new kernel version only when champion
 BEHAVIOR changes locally; git commit+push on every adoption.
 
