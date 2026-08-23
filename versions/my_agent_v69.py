@@ -848,6 +848,9 @@ class MyAgent(Agent):
         self._reason_counts: dict[str, int] = {}
         self._last_s2: Optional[int] = None
         self._cur_counts: Optional[dict[int, int]] = None
+        # solver mode state
+        self._solver: dict = {}
+        self._last_solver_pos: Optional[tuple[int, int]] = None
         # reaction flag (desperation-mode interact trigger)
         self._world_reacted = False
         # object-centric navigation
@@ -950,6 +953,15 @@ class MyAgent(Agent):
                 return self._emit(akey, s, "replay: known-good prefix")
             self.replay_queue.clear()
 
+        # -- 1.2 SOLVER MODE: when a known archetype is detected with
+        # confidence and the game is stagnant, exit the exploration stack
+        # and execute the archetype's dedicated policy at scripted pace.
+        # Exploration solves levels at 10-50x human baseline = ~1% credit;
+        # only direct execution can approach baseline speed.
+        sv = self._solver_action(s, grid, available)
+        if sv is not None:
+            return self._emit(sv, s, "solver: archetype execution")
+
         # -- 1.5 Opening probe: press each simple action 3x to learn the
         # interface (avatar + directions) as fast as possible --------------
         if self._probe_queue is None and self.action_count <= 3:
@@ -1035,9 +1047,8 @@ class MyAgent(Agent):
                 self.plan_expected.append(nxt if nxt is not None else -1)
                 cur = nxt if nxt is not None else cur
             akey = self.plan.popleft()
-            # plan_expected head = predicted RESULT of this action,
-            # verified next frame (popping it here killed every plan
-            # after one step, since v3)
+            if self.plan_expected:
+                self.plan_expected.popleft()
             return self._emit(akey, s, "plan: toward goal/frontier")
 
         # -- 6. Nothing new reachable: reset if stuck, else random legal ----
@@ -1110,6 +1121,7 @@ class MyAgent(Agent):
             self.avm.blocked_tries.clear()
             self.avm.pos = None
             self.nav_target = None
+            self._solver.clear()
             self._legend_order = []
             self._legend_box = None
             self._legend_at = -999
@@ -1758,6 +1770,151 @@ class MyAgent(Agent):
     # submissions double as diagnostics of the PRIVATE eval games (the
     # only feedback channel — episode replays are not exposed).
     # ------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # SOLVER MODE — collect archetype (v69)
+    # Detection: avatar with a known direction map + >=2 small solid
+    # same-colored targets. Execution: nearest target, greedy stepping
+    # with perpendicular sidesteps on blocks (the manual-play pattern
+    # that collected wa30 candles at baseline pace), interact keys on
+    # any reaction/overlap, advance when the target count drops.
+    # Bounded: activates on stagnation, aborts after fruitless work.
+    # ------------------------------------------------------------------
+    SOLVER_STAGNANT = 600     # actions without score-up before activating
+    SOLVER_PATIENCE = 500     # fruitless solver actions before abort
+
+    def _solver_detect(self, grid: list[list[int]]) -> Optional[dict]:
+        dirmap = self.avm.direction_map()
+        if len(dirmap) < 3 or not grid:
+            return None
+        av_color = self.avm.avatar_color()
+        h, w = len(grid), len(grid[0])
+        counts = _color_counts(grid)
+        background = max(counts, key=counts.get)  # type: ignore[arg-type]
+        # single-color groups of small solid components
+        groups: dict[int, list[tuple[int, int]]] = {}
+        seen: set[tuple[int, int]] = set()
+        for y in range(h):
+            for x in range(w):
+                if (x, y) in seen or grid[y][x] == background:
+                    continue
+                c0 = grid[y][x]
+                stack = [(x, y)]
+                seen.add((x, y))
+                cells = []
+                while stack:
+                    cx, cy = stack.pop()
+                    cells.append((cx, cy))
+                    for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                        nx, ny = cx + dx, cy + dy
+                        if 0 <= nx < w and 0 <= ny < h \
+                                and (nx, ny) not in seen \
+                                and grid[ny][nx] == c0:
+                            seen.add((nx, ny))
+                            stack.append((nx, ny))
+                if c0 == av_color or not (4 <= len(cells) <= 40):
+                    continue
+                xs = [c[0] for c in cells]
+                ys = [c[1] for c in cells]
+                if len(cells) < 0.7 * (max(xs) - min(xs) + 1) \
+                        * (max(ys) - min(ys) + 1):
+                    continue
+                groups.setdefault(c0, []).append(
+                    (sum(xs) // len(cells), sum(ys) // len(cells)))
+        for c0, cents in groups.items():
+            if 2 <= len(cents) <= 8:
+                return {"color": c0, "targets": cents}
+        return None
+
+    def _solver_action(self, s: int, grid: list[list[int]],
+                       available: list[GameAction]) -> Optional[ActionKey]:
+        st = self._solver
+        stagnant = self.action_count - self.last_scoreup_at
+        if not st.get("active"):
+            if stagnant < self.SOLVER_STAGNANT \
+                    or st.get("fails", {}).get(self.prev_score, 0) >= 2:
+                return None
+            det = self._solver_detect(grid)
+            if det is None:
+                return None
+            st.update(active=True, color=det["color"], spent=0,
+                      count=len(det["targets"]), sidestep=0)
+        # re-detect targets every 4th frame (full-grid scan is costly)
+        if st["spent"] % 4 == 0 or st.get("cached_det") is None:
+            st["cached_det"] = self._solver_detect(grid)
+        det = st["cached_det"]
+        st["spent"] += 1
+        if st["spent"] > self.SOLVER_PATIENCE:
+            fails = st.get("fails", {})
+            fails[self.prev_score] = fails.get(self.prev_score, 0) + 1
+            st.clear()
+            st["fails"] = fails                 # bounded retries per level
+            return None
+        if det is None or det["color"] != st.get("color"):
+            # all targets gone (or scene changed): success or moot
+            st.clear()
+            return None
+        if len(det["targets"]) < st.get("count", 99):
+            st["count"] = len(det["targets"])
+            st["spent"] = 0                     # progress: reset patience
+        dirmap = self.avm.direction_map()
+        pos = self.avm.locate(grid)
+        if pos is None or not dirmap:
+            st.clear()
+            return None
+        # a reaction near us (highlight): press interact keys first
+        if self._world_reacted:
+            move_names = set(dirmap)
+            for a in available:
+                if a is GameAction.RESET or a.is_complex() \
+                        or a.name in move_names:
+                    continue
+                ak = ActionKey(a)
+                if ak not in self.mem.tried[s] \
+                        and (s, ak) not in self.mem.model.deadly:
+                    return ak
+        # greedy step toward the nearest target with sidestep-on-block
+        # and cycling APPROACH MODES: targets are often solid from some
+        # sides (wa30 candles admit entry only from below)
+        tx, ty = min(det["targets"],
+                     key=lambda t: abs(t[0] - pos[0]) + abs(t[1] - pos[1]))
+        if self._last_solver_pos == pos:
+            st["sidestep"] += 1
+        else:
+            st["sidestep"] = max(0, st.get("sidestep", 0) - 1)
+        self._last_solver_pos = pos
+        if st.get("sidestep", 0) >= 8:
+            st["mode"] = (st.get("mode", 0) + 1) % 4
+            st["sidestep"] = 0
+            st["spent"] = max(0, st["spent"] - 100)  # new approach, new hope
+        mode = st.get("mode", 0)
+        off = ((0, 0), (0, 6), (-6, 0), (6, 0))[mode]
+        wx = max(0, min(63, tx + off[0]))
+        wy = max(0, min(63, ty + off[1]))
+        # far from the waypoint: head there; close: final approach
+        if abs(pos[0] - wx) + abs(pos[1] - wy) > 3 and mode != 0:
+            tx, ty = wx, wy
+        dxx, dyy = tx - pos[0], ty - pos[1]
+        prefer_x = abs(dxx) >= abs(dyy)
+        if st.get("sidestep", 0) % 3 == 2:
+            prefer_x = not prefer_x            # blocked: try the other axis
+        want = (1 if dxx > 0 else -1, 0) if prefer_x \
+            else (0, 1 if dyy > 0 else -1)
+        best_name, best_dot = None, -99
+        for name, d in dirmap.items():
+            sx = 1 if d[0] > 0 else (-1 if d[0] < 0 else 0)
+            sy = 1 if d[1] > 0 else (-1 if d[1] < 0 else 0)
+            dot = sx * want[0] + sy * want[1]
+            if dot > best_dot:
+                best_dot, best_name = dot, name
+        if best_name is None:
+            st.clear()
+            return None
+        ak = ActionKey(GameAction[best_name])
+        if self._is_legal(ak, available) \
+                and (s, ak) not in self.mem.model.deadly:
+            return ak
+        return None
+
     def _desperate(self) -> bool:
         """Zero score after DESPERATE_AFTER actions: nothing to lose.
 
