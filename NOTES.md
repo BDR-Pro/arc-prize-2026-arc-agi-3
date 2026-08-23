@@ -394,3 +394,49 @@ cp ~/kaggle/arc/agent/my_agent.py agent/my_agent.py
   crash the sandbox shell for the whole session.
 - The user's KGAT token has appeared in chat; remind them to rotate it at
   kaggle.com/settings when the competition workflow stabilizes.
+
+## COMPETITOR INTEL: "The Duck" (Tufa Labs) — 2026-08-23
+
+Analyzed foysalemonshanto/lb-9-arc3-duck-v12 notebook + TAAF source
+(dataset jakobbrggen/taaf-kaggle-source-anim-20260807-anim).
+
+ARCHITECTURE: tool-using LLM agent. Qwen3.8-27B-FP8 on H100 GPU via vLLM.
+Each turn the LLM gets segmented board + Python sandbox, writes code to
+reason & call action(). System prompt = "coding agent solving grid puzzle".
+
+REALITY CHECK: the "LB 9" is a SELF-REPORTED public/offline eval (25 games
+x1 pass), NOT the private LB. Real LB top = 3.57 (cstl); Tufa themselves
+= #3 at 3.04. Top of board is ALL LLM-agent approaches. Our CPU/no-LLM
+kernel cannot run this (needs GPU + open-weights model; no Claude in the
+offline kernel).
+
+LEARNINGS TRANSFERABLE TO OUR PROGRAMMATIC AGENT (they independently
+re-derived most of what we found — strong validation):
+1. Timer-bar trap: "don't click an edge strip segment by segment" ==
+   our volatility mask + tn36 lesson. CONFIRMED we solved it.
+2. Object hash: position-invariant shape+color signature to track objects
+   across frames & detect duplicates. WE LACK a general version (only
+   avatar-color voting). Candidate upgrade.
+3. Animation frames: "board_unchanged != nothing happened" — rejected
+   clicks/wall-bounces show only in transient mid-animation frames.
+   CHECKED: our engine returns multi-layer frames only in some games
+   (ls20=6 layers) and NOT in our click games (vc33/tn36=1 layer), so
+   low payoff for our set. Our _grid_hash already uses last layer only.
+4. BFS/search when goal understood but action-order unclear. VALIDATES
+   optimal_search.py + opening-book direction.
+5. Match objects by color+overlap+bbox+area+edge-contact, not coords.
+6. Verify background by area/stability, don't assume most-frequent.
+
+OPTIMAL-SOLUTION TOOL: optimal_search.py BFS's real engine states
+(deepcopy works, ~14ms/state) for shortest L1 solution. Found: ls20=13,
+sp80=4, cn04=14, m0r0=15 actions. Human baselines are short (4-32), so
+L1s are BFS-solvable offline. Opening book from this made sp80 L1 solve
+in 26 actions = 4.76 pts (from ~0). But v77/v78 (book in agent) net
+level-neutral: helps sp80, delays nav elsewhere. Champion stays v73.
+
+STRATEGIC CEILING: pure-programmatic realistic ceiling is likely ~1-2 LB
+(fast L1s + cascades). Reaching 3.5+ (prize contention) essentially
+requires the LLM-agent architecture on GPU. Decision for bader: accept
+the strong-but-not-winning programmatic agent, OR commit to the GPU/LLM
+rebuild (enable GPU kernel, attach Qwen-class model + vLLM wheelhouse,
+port a tool-agent loop). The latter is a different project.
