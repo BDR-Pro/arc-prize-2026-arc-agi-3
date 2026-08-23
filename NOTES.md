@@ -183,6 +183,17 @@ RETIRED as validation target; solver validation = suite-level only.
 TONIGHT kernel v17 = v68 planner-efficiency experiment; tomorrow:
 if LB > 0.26 -> champion = v70+planner; else v70 alone as kernel v18.
 
+TOP-3 SPEED MECHANISMS (2026-08-23, v71 = champion by MEAN-first):
+1. Cross-level winning-sequence replay (one-shot attempt of level N's
+   pruned win at level N+1 start) -- ar25 L2 in 52 actions vs baseline
+   50 (!) = 5.67 pts; vc33/tu93/lp85 all cascade now.
+2. Last-win click coordinates = supreme click tier at the new level.
+3. Score-up plans exempt from the plan throttle.
+v71 multi-seed: 13/19/20 = 52 levels but means 0.175/0.332/0.350 =
+avg 0.286 -- BEST of campaign, and spread across salts (not one lucky
+lp85). Predicted LB ~0.31. Levels-first championship is DEAD; mean-first
+is the rule now (k~1.1 means local mean IS the LB).
+
 Kernel-push rule refined: push a new kernel version only when champion
 BEHAVIOR changes locally; git commit+push on every adoption.
 
