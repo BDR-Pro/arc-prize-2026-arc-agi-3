@@ -164,6 +164,15 @@ real bugs reads as regression. Next arc needs either many more salts for
 statistical power, or the planner fix paired with better plan TARGETS
 (frontier-chasing may be the true weakness the broken planner was hiding).
 
+LB RESULT 2026-08-23: v67 (16k budget + arsenal + legend + speed cache)
+scored 0.26 -- EXACTLY FLAT vs v54. Calibration k ~= 1.1 now (local mean
+~0.24 -> LB 0.26). VERDICT: budget/levels are a dead end for score; the
+(b/a)^2 square zeroes slow completions. ONLY near-baseline first-solves
+move the LB. NEXT ARC = SOLVER MODE: recognize an archetype (collect /
+push-to-pad / legend-path), exit the exploration stack, run a dedicated
+tight execution loop at scripted quality (manual wa30 play hit baseline
+pace with the same primitives -- composition is the gap, not capability).
+
 Kernel-push rule refined: push a new kernel version only when champion
 BEHAVIOR changes locally; git commit+push on every adoption.
 
