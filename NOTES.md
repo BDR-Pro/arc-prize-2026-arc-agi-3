@@ -219,6 +219,12 @@ avg mean 0.33/0.33/0.33/0.29 < v73's 0.361. Openings are deterministic
 luck either way -- stop permuting them. Real lever = goal-location
 inference (where to walk) + repeated-interact on arrival.
 
+Click catalog: lp85 L1 optimal = 5 actions (click (4,32) FIVE times;
+baseline 17). Our 28 = 23 actions FINDING the cell + 5 clicks. v81 click-
+momentum (repeat productive clicks) REJECTED: toggles at L2 broke the
+cascade. vc33/r11l optima not found within caps (bigger click spaces).
+STANDING CHAMPION v73 (avg 0.361). Tonight kernel v18.
+
 Kernel-push rule refined: push a new kernel version only when champion
 BEHAVIOR changes locally; git commit+push on every adoption.
 
