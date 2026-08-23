@@ -1,67 +1,22 @@
 {
-  "agent": "C:\\Users\\bader\\Downloads\\kaggle\\versions\\my_agent_v76.py",
-  "total_levels": 15,
-  "mean_score": 0.30494400000000005,
+  "agent": "C:\\Users\\bader\\Downloads\\kaggle\\versions\\my_agent_v80.py",
+  "total_levels": 18,
+  "mean_score": 0.268932,
   "results": {
-    "lp85": {
-      "game": "lp85",
-      "levels_completed": 1,
-      "win_levels": 8,
-      "actions": 33,
-      "per_level": [
-        [
-          1,
-          28
-        ]
-      ],
-      "score": 1.024,
-      "time_s": 0.2,
-      "error": "NameError: name 'color_key' is not defined\nTraceback (most recent call last):\n  File \"C:\\Users\\bader\\Downloads\\kaggle\\eval_harness.py\", line 123, in run_game\n    action = agent.choose_action(frames, latest)\n  File \"C:\\Users\\bader\\Downloads\\kaggle\\versions\\my_agent_v76.py\", line 1068, in choose_action\n    akey = self._pick_exploration_action(s, grid, available)\n  File \"C:\\Users\\bader\\Downloads\\kaggle\\versions\\my_agent_v76.py\", line 1419, in _pick_exploration_action\n    cand = sorted((t for t in centroids\n                   if color_key(t) in wcc and t not in tierW),\n                  key=lambda t: abs(t[0] - ax) + abs(t[1] - ay))\n  File \"C:\\Users\\bader\\Downloads\\kaggle\\versions\\my_agent_v76.py\", line 1420, in <genexpr>\n    if color_key(t) in wcc and t not in tierW),\n       ^^^^^^^^^\nNameError: name 'color_key' is not defined\n"
-    },
     "cd82": {
       "game": "cd82",
       "levels_completed": 1,
       "win_levels": 6,
-      "actions": 252,
+      "actions": 4000,
       "per_level": [
         [
           1,
-          183
+          1327
         ]
       ],
-      "score": 0.4301,
-      "time_s": 0.7,
-      "error": "NameError: name 'color_key' is not defined\nTraceback (most recent call last):\n  File \"C:\\Users\\bader\\Downloads\\kaggle\\eval_harness.py\", line 123, in run_game\n    action = agent.choose_action(frames, latest)\n  File \"C:\\Users\\bader\\Downloads\\kaggle\\versions\\my_agent_v76.py\", line 1068, in choose_action\n    akey = self._pick_exploration_action(s, grid, available)\n  File \"C:\\Users\\bader\\Downloads\\kaggle\\versions\\my_agent_v76.py\", line 1419, in _pick_exploration_action\n    cand = sorted((t for t in centroids\n                   if color_key(t) in wcc and t not in tierW),\n                  key=lambda t: abs(t[0] - ax) + abs(t[1] - ay))\n  File \"C:\\Users\\bader\\Downloads\\kaggle\\versions\\my_agent_v76.py\", line 1420, in <genexpr>\n    if color_key(t) in wcc and t not in tierW),\n       ^^^^^^^^^\nNameError: name 'color_key' is not defined\n"
-    },
-    "ft09": {
-      "game": "ft09",
-      "levels_completed": 1,
-      "win_levels": 6,
-      "actions": 758,
-      "per_level": [
-        [
-          1,
-          728
-        ]
-      ],
-      "score": 0.0166,
-      "time_s": 6.3,
-      "error": "NameError: name 'color_key' is not defined\nTraceback (most recent call last):\n  File \"C:\\Users\\bader\\Downloads\\kaggle\\eval_harness.py\", line 123, in run_game\n    action = agent.choose_action(frames, latest)\n  File \"C:\\Users\\bader\\Downloads\\kaggle\\versions\\my_agent_v76.py\", line 1068, in choose_action\n    akey = self._pick_exploration_action(s, grid, available)\n  File \"C:\\Users\\bader\\Downloads\\kaggle\\versions\\my_agent_v76.py\", line 1419, in _pick_exploration_action\n    cand = sorted((t for t in centroids\n                   if color_key(t) in wcc and t not in tierW),\n                  key=lambda t: abs(t[0] - ax) + abs(t[1] - ay))\n  File \"C:\\Users\\bader\\Downloads\\kaggle\\versions\\my_agent_v76.py\", line 1420, in <genexpr>\n    if color_key(t) in wcc and t not in tierW),\n       ^^^^^^^^^\nNameError: name 'color_key' is not defined\n"
-    },
-    "r11l": {
-      "game": "r11l",
-      "levels_completed": 1,
-      "win_levels": 6,
-      "actions": 194,
-      "per_level": [
-        [
-          1,
-          165
-        ]
-      ],
-      "score": 0.0847,
-      "time_s": 1.4,
-      "error": "NameError: name 'color_key' is not defined\nTraceback (most recent call last):\n  File \"C:\\Users\\bader\\Downloads\\kaggle\\eval_harness.py\", line 123, in run_game\n    action = agent.choose_action(frames, latest)\n  File \"C:\\Users\\bader\\Downloads\\kaggle\\versions\\my_agent_v76.py\", line 1068, in choose_action\n    akey = self._pick_exploration_action(s, grid, available)\n  File \"C:\\Users\\bader\\Downloads\\kaggle\\versions\\my_agent_v76.py\", line 1419, in _pick_exploration_action\n    cand = sorted((t for t in centroids\n                   if color_key(t) in wcc and t not in tierW),\n                  key=lambda t: abs(t[0] - ax) + abs(t[1] - ay))\n  File \"C:\\Users\\bader\\Downloads\\kaggle\\versions\\my_agent_v76.py\", line 1420, in <genexpr>\n    if color_key(t) in wcc and t not in tierW),\n       ^^^^^^^^^\nNameError: name 'color_key' is not defined\n"
+      "score": 0.0082,
+      "time_s": 16.4,
+      "error": null
     },
     "lf52": {
       "game": "lf52",
@@ -70,7 +25,7 @@
       "actions": 4000,
       "per_level": [],
       "score": 0.0,
-      "time_s": 13.1,
+      "time_s": 17.4,
       "error": null
     },
     "cn04": {
@@ -80,7 +35,53 @@
       "actions": 4000,
       "per_level": [],
       "score": 0.0,
-      "time_s": 39.1,
+      "time_s": 33.3,
+      "error": null
+    },
+    "ft09": {
+      "game": "ft09",
+      "levels_completed": 1,
+      "win_levels": 6,
+      "actions": 4000,
+      "per_level": [
+        [
+          1,
+          728
+        ]
+      ],
+      "score": 0.0166,
+      "time_s": 41.8,
+      "error": null
+    },
+    "lp85": {
+      "game": "lp85",
+      "levels_completed": 5,
+      "win_levels": 8,
+      "actions": 4000,
+      "per_level": [
+        [
+          1,
+          28
+        ],
+        [
+          2,
+          1032
+        ],
+        [
+          3,
+          104
+        ],
+        [
+          4,
+          454
+        ],
+        [
+          5,
+          1633
+        ]
+      ],
+      "score": 1.7945,
+      "time_s": 43.0,
       "error": null
     },
     "g50t": {
@@ -91,36 +92,31 @@
       "per_level": [
         [
           1,
-          2785
+          2171
         ]
       ],
-      "score": 0.0028,
-      "time_s": 57.0,
+      "score": 0.0046,
+      "time_s": 49.8,
       "error": null
     },
-    "s5i5": {
-      "game": "s5i5",
-      "levels_completed": 1,
-      "win_levels": 8,
-      "actions": 1334,
-      "per_level": [
-        [
-          1,
-          1305
-        ]
-      ],
-      "score": 0.0007,
-      "time_s": 50.4,
-      "error": "NameError: name 'color_key' is not defined\nTraceback (most recent call last):\n  File \"C:\\Users\\bader\\Downloads\\kaggle\\eval_harness.py\", line 123, in run_game\n    action = agent.choose_action(frames, latest)\n  File \"C:\\Users\\bader\\Downloads\\kaggle\\versions\\my_agent_v76.py\", line 1068, in choose_action\n    akey = self._pick_exploration_action(s, grid, available)\n  File \"C:\\Users\\bader\\Downloads\\kaggle\\versions\\my_agent_v76.py\", line 1419, in _pick_exploration_action\n    cand = sorted((t for t in centroids\n                   if color_key(t) in wcc and t not in tierW),\n                  key=lambda t: abs(t[0] - ax) + abs(t[1] - ay))\n  File \"C:\\Users\\bader\\Downloads\\kaggle\\versions\\my_agent_v76.py\", line 1420, in <genexpr>\n    if color_key(t) in wcc and t not in tierW),\n       ^^^^^^^^^\nNameError: name 'color_key' is not defined\n"
-    },
-    "re86": {
-      "game": "re86",
+    "bp35": {
+      "game": "bp35",
       "levels_completed": 0,
-      "win_levels": 8,
+      "win_levels": 9,
       "actions": 4000,
       "per_level": [],
       "score": 0.0,
-      "time_s": 59.6,
+      "time_s": 50.0,
+      "error": null
+    },
+    "ka59": {
+      "game": "ka59",
+      "levels_completed": 0,
+      "win_levels": 7,
+      "actions": 4000,
+      "per_level": [],
+      "score": 0.0,
+      "time_s": 50.1,
       "error": null
     },
     "ls20": {
@@ -131,11 +127,36 @@
       "per_level": [
         [
           1,
-          525
+          435
         ]
       ],
-      "score": 0.0063,
-      "time_s": 74.1,
+      "score": 0.0091,
+      "time_s": 45.6,
+      "error": null
+    },
+    "ar25": {
+      "game": "ar25",
+      "levels_completed": 1,
+      "win_levels": 8,
+      "actions": 4000,
+      "per_level": [
+        [
+          1,
+          684
+        ]
+      ],
+      "score": 0.0061,
+      "time_s": 66.5,
+      "error": null
+    },
+    "re86": {
+      "game": "re86",
+      "levels_completed": 0,
+      "win_levels": 8,
+      "actions": 4000,
+      "per_level": [],
+      "score": 0.0,
+      "time_s": 22.0,
       "error": null
     },
     "m0r0": {
@@ -146,21 +167,11 @@
       "per_level": [
         [
           1,
-          652
+          251
         ]
       ],
-      "score": 0.0101,
-      "time_s": 74.1,
-      "error": null
-    },
-    "bp35": {
-      "game": "bp35",
-      "levels_completed": 0,
-      "win_levels": 9,
-      "actions": 4000,
-      "per_level": [],
-      "score": 0.0,
-      "time_s": 81.7,
+      "score": 0.068,
+      "time_s": 49.0,
       "error": null
     },
     "sk48": {
@@ -170,33 +181,18 @@
       "actions": 4000,
       "per_level": [],
       "score": 0.0,
-      "time_s": 12.0,
+      "time_s": 16.7,
       "error": null
     },
-    "ka59": {
-      "game": "ka59",
+    "dc22": {
+      "game": "dc22",
       "levels_completed": 0,
-      "win_levels": 7,
+      "win_levels": 6,
       "actions": 4000,
       "per_level": [],
       "score": 0.0,
-      "time_s": 87.3,
+      "time_s": 74.5,
       "error": null
-    },
-    "vc33": {
-      "game": "vc33",
-      "levels_completed": 1,
-      "win_levels": 7,
-      "actions": 78,
-      "per_level": [
-        [
-          1,
-          65
-        ]
-      ],
-      "score": 0.0414,
-      "time_s": 0.4,
-      "error": "NameError: name 'color_key' is not defined\nTraceback (most recent call last):\n  File \"C:\\Users\\bader\\Downloads\\kaggle\\eval_harness.py\", line 123, in run_game\n    action = agent.choose_action(frames, latest)\n  File \"C:\\Users\\bader\\Downloads\\kaggle\\versions\\my_agent_v76.py\", line 1068, in choose_action\n    akey = self._pick_exploration_action(s, grid, available)\n  File \"C:\\Users\\bader\\Downloads\\kaggle\\versions\\my_agent_v76.py\", line 1419, in _pick_exploration_action\n    cand = sorted((t for t in centroids\n                   if color_key(t) in wcc and t not in tierW),\n                  key=lambda t: abs(t[0] - ax) + abs(t[1] - ay))\n  File \"C:\\Users\\bader\\Downloads\\kaggle\\versions\\my_agent_v76.py\", line 1420, in <genexpr>\n    if color_key(t) in wcc and t not in tierW),\n       ^^^^^^^^^\nNameError: name 'color_key' is not defined\n"
     },
     "sc25": {
       "game": "sc25",
@@ -205,7 +201,47 @@
       "actions": 4000,
       "per_level": [],
       "score": 0.0,
-      "time_s": 57.7,
+      "time_s": 30.7,
+      "error": null
+    },
+    "r11l": {
+      "game": "r11l",
+      "levels_completed": 1,
+      "win_levels": 6,
+      "actions": 4000,
+      "per_level": [
+        [
+          1,
+          165
+        ]
+      ],
+      "score": 0.0847,
+      "time_s": 49.3,
+      "error": null
+    },
+    "s5i5": {
+      "game": "s5i5",
+      "levels_completed": 1,
+      "win_levels": 8,
+      "actions": 4000,
+      "per_level": [
+        [
+          1,
+          1305
+        ]
+      ],
+      "score": 0.0007,
+      "time_s": 41.9,
+      "error": null
+    },
+    "tr87": {
+      "game": "tr87",
+      "levels_completed": 0,
+      "win_levels": 6,
+      "actions": 4000,
+      "per_level": [],
+      "score": 0.0,
+      "time_s": 16.7,
       "error": null
     },
     "sp80": {
@@ -216,40 +252,11 @@
       "per_level": [
         [
           1,
-          495
+          42
         ]
       ],
-      "score": 0.0296,
-      "time_s": 49.3,
-      "error": null
-    },
-    "tr87": {
-      "game": "tr87",
-      "levels_completed": 0,
-      "win_levels": 6,
-      "actions": 4000,
-      "per_level": [],
-      "score": 0.0,
-      "time_s": 61.9,
-      "error": null
-    },
-    "ar25": {
-      "game": "ar25",
-      "levels_completed": 2,
-      "win_levels": 8,
-      "actions": 4000,
-      "per_level": [
-        [
-          1,
-          73
-        ],
-        [
-          2,
-          52
-        ]
-      ],
-      "score": 5.6702,
-      "time_s": 148.5,
+      "score": 4.1059,
+      "time_s": 23.5,
       "error": null
     },
     "sb26": {
@@ -259,32 +266,7 @@
       "actions": 4000,
       "per_level": [],
       "score": 0.0,
-      "time_s": 106.7,
-      "error": null
-    },
-    "dc22": {
-      "game": "dc22",
-      "levels_completed": 1,
-      "win_levels": 6,
-      "actions": 4000,
-      "per_level": [
-        [
-          1,
-          3922
-        ]
-      ],
-      "score": 0.0011,
-      "time_s": 157.6,
-      "error": null
-    },
-    "wa30": {
-      "game": "wa30",
-      "levels_completed": 0,
-      "win_levels": 9,
-      "actions": 4000,
-      "per_level": [],
-      "score": 0.0,
-      "time_s": 66.7,
+      "time_s": 40.5,
       "error": null
     },
     "tu93": {
@@ -295,15 +277,15 @@
       "per_level": [
         [
           1,
-          1861
+          1527
         ],
         [
           2,
-          61
+          48
         ]
       ],
-      "score": 0.306,
-      "time_s": 82.2,
+      "score": 0.4942,
+      "time_s": 19.9,
       "error": null
     },
     "su15": {
@@ -313,7 +295,17 @@
       "actions": 4000,
       "per_level": [],
       "score": 0.0,
-      "time_s": 101.5,
+      "time_s": 35.6,
+      "error": null
+    },
+    "wa30": {
+      "game": "wa30",
+      "levels_completed": 0,
+      "win_levels": 9,
+      "actions": 4000,
+      "per_level": [],
+      "score": 0.0,
+      "time_s": 18.1,
       "error": null
     },
     "tn36": {
@@ -323,7 +315,26 @@
       "actions": 4000,
       "per_level": [],
       "score": 0.0,
-      "time_s": 111.9,
+      "time_s": 38.2,
+      "error": null
+    },
+    "vc33": {
+      "game": "vc33",
+      "levels_completed": 2,
+      "win_levels": 7,
+      "actions": 4000,
+      "per_level": [
+        [
+          1,
+          65
+        ],
+        [
+          2,
+          161
+        ]
+      ],
+      "score": 0.1307,
+      "time_s": 32.2,
       "error": null
     }
   }

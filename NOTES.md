@@ -205,6 +205,20 @@ at machine speed; nightly submission is confirmation only. ALWAYS rerun
 suspicious numbers (stale-file artifacts happen when evals launch
 while files are mid-edit).
 
+OPTIMAL-SOLUTION CATALOG (optimal_search.py = BFS over deep-copied
+engine states; dedup ignores the UI rect). Level-1 optima vs our agent:
+  sp80 4 actions (R R R A5) vs 263-1802 | ls20 13 (L3 U4 R3 U3) vs ~500
+  cn04 14 (D7 R4 A5 A5 A5) vs 2453 | m0r0 15 (winding walk) vs ~850
+  ar25 15 (D10 L5) vs 73 (lucky) | state spaces: 38-1700 states only.
+LESSON: keyboard L1 = short walk (1-3 legs) to a location (+interact,
+sometimes REPEATED x3). Scoring needs the walk found in <~2x baseline.
+Opening-book attempts (v77 full book 56 acts, v78 single pass, v79
+adaptive stop, v80 classic+book): sp80 -> 4.76 pts (26 actions!) but
+ar25's lucky 73-action L1 (and its 5.67-pt L2 cascade) breaks; net
+avg mean 0.33/0.33/0.33/0.29 < v73's 0.361. Openings are deterministic
+luck either way -- stop permuting them. Real lever = goal-location
+inference (where to walk) + repeated-interact on arrival.
+
 Kernel-push rule refined: push a new kernel version only when champion
 BEHAVIOR changes locally; git commit+push on every adoption.
 
