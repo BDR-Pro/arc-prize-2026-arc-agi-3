@@ -173,6 +173,16 @@ push-to-pad / legend-path), exit the exploration stack, run a dedicated
 tight execution loop at scripted quality (manual wa30 play hit baseline
 pace with the same primitives -- composition is the gap, not capability).
 
+SOLVER ARC (2026-08-23): v69 collect-solver = -5 levels (ungated
+takeover). v70 adds the EVIDENCE GATE (world must confirm the archetype:
+a target vanished during exploration, or a reaction fired near one,
+before the solver commits budget) -> 20/22/20 = 62, ~zero local cost,
+capability aboard. wa30 STILL unfinished after 5 attempts (3-direction
+dirmap breaks the from-below route; transient self-blocks) -- wa30 is
+RETIRED as validation target; solver validation = suite-level only.
+TONIGHT kernel v17 = v68 planner-efficiency experiment; tomorrow:
+if LB > 0.26 -> champion = v70+planner; else v70 alone as kernel v18.
+
 Kernel-push rule refined: push a new kernel version only when champion
 BEHAVIOR changes locally; git commit+push on every adoption.
 
