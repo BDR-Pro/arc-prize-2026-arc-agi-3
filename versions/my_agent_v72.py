@@ -853,7 +853,6 @@ class MyAgent(Agent):
         self._won_clicks: list = []
         self._won_seq_tried = True
         self._strategy_queue: deque = deque()
-        self._finisher_pending = False
         # solver mode state
         self._solver: dict = {}
         self._last_solver_pos: Optional[tuple[int, int]] = None
@@ -968,23 +967,24 @@ class MyAgent(Agent):
                 and self.action_count - self.last_scoreup_at < 10:
             self._won_seq_tried = True
             self._strategy_queue = deque(self._won_seq)
-            self._finisher_pending = len(self._won_seq) > 20
+            self._strategy_from = len(self.episode_effects)
         sq = getattr(self, "_strategy_queue", None)
         if sq:
-            akey = sq.popleft()
-            if self._is_legal(akey, available) \
-                    and (s, akey) not in self.mem.model.deadly:
-                self.since_new_state = 0
-                return self._emit(akey, s, "strategy: replay last win")
-            sq.clear()
-        elif getattr(self, "_finisher_pending", False) \
-                and self.prev_score > 0 \
-                and 150 < self.action_count - self.last_scoreup_at < 400:
-            # second stage: the FINISHING MOVE alone — the last actions
-            # of the win are the actual solution and often transfer even
-            # when the wandering prefix does not
-            self._finisher_pending = False
-            self._strategy_queue = deque(self._won_seq[-20:])
+            # mismatch abort: if the first replayed actions do nothing
+            # visible, this level's structure differs — stop wasting the
+            # sequence and return to normal play
+            done_n = len(self.episode_effects) \
+                - getattr(self, "_strategy_from", 0)
+            if done_n >= 8 and sum(
+                    self.episode_effects[-min(done_n, 8):]) < 2:
+                sq.clear()
+            else:
+                akey = sq.popleft()
+                if self._is_legal(akey, available) \
+                        and (s, akey) not in self.mem.model.deadly:
+                    self.since_new_state = 0
+                    return self._emit(akey, s, "strategy: replay last win")
+                sq.clear()
 
         # -- 1.2 SOLVER MODE: when a known archetype is detected with
         # confidence and the game is stagnant, exit the exploration stack
