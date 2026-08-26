@@ -1,2 +1,2 @@
 @echo off
-wsl -e bash -lc "cd /home/bader/kaggle/arc && /home/bader/kaggle/arc/ARC-AGI-3-Kaggle-Starter/.venv/bin/kaggle competitions submit arc-prize-2026-arc-agi-3 -k baderalotaibi11/arc-agi-3-world-model-agent -v 19 -f submission.parquet -m 'v79 = v73 + generic correctness fixes' >> /home/bader/submit_log.txt 2>&1"
+wsl -e bash -lc "cd /home/bader/kaggle/arc && /home/bader/kaggle/arc/ARC-AGI-3-Kaggle-Starter/.venv/bin/kaggle competitions submit arc-prize-2026-arc-agi-3 -k baderalotaibi11/arc-agi-3-llm-agent -v 1 -f submission.parquet -m 'LLM agent (Qwen2.5-3B) + v79 floor' >> /home/bader/submit_log.txt 2>&1"
