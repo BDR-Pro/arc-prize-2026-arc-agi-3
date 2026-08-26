@@ -15,6 +15,6 @@
     "arc-prize-2026-arc-agi-3"
   ],
   "model_sources": [
-    "qwen-lm/qwen2.5/transformers/3b-instruct/1"
+    "qwen-lm/qwen2.5/transformers/7b-instruct/1"
   ]
 }

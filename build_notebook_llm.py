@@ -16,7 +16,7 @@ AGENT = (HERE / "my_agent_llm.py").read_text(encoding="utf-8")
 OUTDIR = HERE / "notebooks_llm"
 OUTDIR.mkdir(exist_ok=True)
 
-MODEL_MOUNT = "/kaggle/input/qwen2.5/transformers/3b-instruct/1"
+MODEL_MOUNT = "/kaggle/input/qwen2.5/transformers/7b-instruct/1"
 
 
 def code(src):
@@ -31,7 +31,7 @@ install = code(
     "import os\n"
     "# locate the attached qwen model dir (mount path can vary by version)\n"
     "import glob\n"
-    "cands = glob.glob('/kaggle/input/**/3b-instruct/**/config.json', recursive=True)\n"
+    "cands = glob.glob('/kaggle/input/**/7b-instruct/**/config.json', recursive=True)\n"
     "MODEL_DIR = os.path.dirname(cands[0]) if cands else " + repr(MODEL_MOUNT) + "\n"
     "print('MODEL_DIR =', MODEL_DIR, '| exists:', os.path.isdir(MODEL_DIR))"
 )
@@ -95,7 +95,7 @@ nb = {
     "nbformat_minor": 4, "nbformat": 4,
     "cells": [
         {"cell_type": "markdown", "metadata": {},
-         "source": "# ARC-AGI-3 LLM Agent (Qwen2.5-3B + v79 programmatic floor)\n"
+         "source": "# ARC-AGI-3 LLM Agent (Qwen2.5-7B + v79 programmatic floor)\n"
                    "GPU kernel. LLM proposes short action sequences; the proven\n"
                    "programmatic agent is the hard floor on any model failure."},
         install, write_agent, run, dummy,
@@ -111,7 +111,7 @@ meta = {
     "enable_gpu": True, "enable_tpu": False, "enable_internet": False,
     "keywords": [], "dataset_sources": [], "kernel_sources": [],
     "competition_sources": ["arc-prize-2026-arc-agi-3"],
-    "model_sources": ["qwen-lm/qwen2.5/transformers/3b-instruct/1"],
+    "model_sources": ["qwen-lm/qwen2.5/transformers/7b-instruct/1"],
 }
 (OUTDIR / "kernel-metadata.json").write_text(json.dumps(meta, indent=2))
 print("wrote", OUTDIR / "submission.ipynb", "and kernel-metadata.json")

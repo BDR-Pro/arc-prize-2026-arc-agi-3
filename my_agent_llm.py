@@ -2235,9 +2235,17 @@ class HFLocalLLM:
             raise LLMUnavailable(f"hf import: {e}")
         self.model_id = os.environ.get("ARC_LLM_MODEL", "Qwen/Qwen2.5-0.5B-Instruct")
         try:
+            import torch
+            self._cuda = torch.cuda.is_available()
             self.tok = AutoTokenizer.from_pretrained(self.model_id)
-            self.model = AutoModelForCausalLM.from_pretrained(
-                self.model_id, torch_dtype="auto")
+            if self._cuda:
+                # shard across available GPUs (7B fp16 ~14GB); fp16 on GPU
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.model_id, torch_dtype=torch.float16,
+                    device_map="auto")
+            else:
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.model_id, torch_dtype="auto")
         except Exception as e:  # noqa: BLE001
             raise LLMUnavailable(f"hf load: {e}")
 
@@ -2248,6 +2256,8 @@ class HFLocalLLM:
             text = self.tok.apply_chat_template(
                 msgs, tokenize=False, add_generation_prompt=True)
             inputs = self.tok(text, return_tensors="pt")
+            if getattr(self, "_cuda", False):
+                inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
             out = self.model.generate(**inputs, max_new_tokens=max_tokens,
                                       do_sample=False)
             gen = out[0][inputs["input_ids"].shape[1]:]

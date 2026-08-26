@@ -501,3 +501,13 @@ LLM fires on stalled games (wa30) & stays quiet when v79 progresses (vc33),
 call cap enforced. Kernel arc-agi-3-llm-agent v2 (GPU T4, Qwen2.5-3B).
 Daily submit -> LLM kernel v2. NEXT: measure on LB; if promising, step to
 7b-instruct and enrich the sandbox (multi-turn: let the LLM probe then act).
+
+
+## LLM AGENT -> 7B (2026-08-26)
+Stepped up to Qwen2.5-7B-instruct (kernel v3). Fixed a CRITICAL bug: the
+HF client loaded the model on CPU (no device_map) -> would be unusably
+slow on GPU. Now: device_map='auto' (shards across 2xT4=32GB), fp16,
+inputs moved to model device. 7B fp16 ~15GB fits across the 2xT4.
+7B kernel builds clean, model mounts. Daily submit -> LLM kernel v3.
+v79 (55787954) still PENDING at last check; will read its score to
+confirm the 0.27 floor holds under the correctness fixes.
