@@ -486,3 +486,18 @@ cannot score < 0.27 because the floor is inlined). If the 3B is too weak,
 step up to 7b-instruct. The real lever is adding a Python-tool sandbox
 (the Duck's key trick) so the LLM can BFS/search — that is what turns an
 LLM-agent from ~1 into 3+.
+
+## LLM AGENT v2 (2026-08-26) — inverted control + code sandbox
+Key redesign: v79 DRIVES, LLM RESCUES stalls (was: LLM drives + floor).
+  - LLM invoked only after v79 stalls STALL_TRIGGER=250 actions w/o score.
+  - Hard cap MAX_LLM_CALLS=40/game (~60s GPU @ 3B) -> fits 160s budget.
+  - LLM can reply with ACTIONS list OR a fenced ```python``` block that
+    builds a `plan` list (given grid, objects, valid) -> lets it BFS/search
+    in a restricted sandbox (SAFE_BUILTINS, no imports; malicious code just
+    yields empty). This is the Duck's key trick, safely.
+  - v79 floor intact: any error/empty/illegal -> v79. Cannot score < 0.27.
+Validated locally: code-plan exec, direct parse, sandbox blocks imports,
+LLM fires on stalled games (wa30) & stays quiet when v79 progresses (vc33),
+call cap enforced. Kernel arc-agi-3-llm-agent v2 (GPU T4, Qwen2.5-3B).
+Daily submit -> LLM kernel v2. NEXT: measure on LB; if promising, step to
+7b-instruct and enrich the sandbox (multi-turn: let the LLM probe then act).

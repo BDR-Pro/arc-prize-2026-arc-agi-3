@@ -1,13 +1,16 @@
-"""LLM tool-agent for ARC-AGI-3 with a warm programmatic fallback.
+"""LLM rescue-agent for ARC-AGI-3 (v2): v79 drives, LLM rescues stalls.
 
-Design:
-  - The LLM proposes a SHORT action sequence per query (inference is slow;
-    we cannot call it every action of a 16k budget).
-  - The sequence is executed action-by-action.
-  - A programmatic agent (v79) is fed every frame so its world model stays
-    warm; it takes over whenever the LLM is unavailable, errors, or stalls.
-  - Any exception anywhere -> programmatic fallback. The programmatic agent
-    is therefore a hard floor: the LLM can only add value.
+Inverted control vs v1:
+  - The proven programmatic agent (v79) DRIVES every frame. It is fast and
+    good at the games it handles.
+  - The LLM is invoked ONLY when v79 has stalled (no score-up for
+    STALL_TRIGGER actions). Expensive reasoning is spent exactly where the
+    programmatic agent fails.
+  - When invoked, the LLM may either name actions directly OR write Python
+    code in a sandbox that inspects the board and calls act(...) — letting
+    it run BFS / search, the mechanism that separates strong LLM agents.
+  - Any error, empty result, or unproductive stint returns control to v79.
+    v79 is a hard floor: the LLM can only add value.
 """
 from __future__ import annotations
 import re
@@ -27,7 +30,6 @@ sys.path.insert(0, str(_HERE.parent))
 import render as _render          # noqa: E402
 import llm_client as _llmc        # noqa: E402
 
-# programmatic fallback (the proven v79 agent, imported as a plain class)
 import importlib.util as _ilu
 _spec = _ilu.spec_from_file_location(
     "prog_agent", str(_HERE.parent / "my_agent.py"))
@@ -37,33 +39,64 @@ ProgAgent = _prog.MyAgent
 
 
 SYSTEM_PROMPT = (
-    "You are an agent playing a 64x64 grid puzzle game. "
-    "Each turn you see the board as objects plus an ASCII color grid, the "
-    "valid actions, and recent history. Decide the next 1-6 actions that "
-    "best advance toward clearing the level, preferring the FEWEST actions. "
-    "Actions: ACTION1-5 and ACTION7 are simple key presses (movement / "
-    "interact; their meaning varies per game). ACTION6 is a mouse click "
-    "needing coordinates. RESET restarts the level.\n"
-    "Reply in EXACTLY this format:\n"
-    "PLAN: <one short line of reasoning>\n"
-    "ACTIONS: <comma-separated, e.g. ACTION1, ACTION1, ACTION6 12 30>\n"
-    "Use 'ACTION6 <row> <col>' for clicks. Output nothing after ACTIONS."
+    "You are an expert agent for a 64x64 grid puzzle game. A fast rule-based "
+    "player is STUCK on the current level and has handed control to you to "
+    "find a breakthrough. You see the board as objects plus an ASCII color "
+    "grid, the valid actions, recent history, and what the last action "
+    "changed.\n"
+    "Key guidance (hard-won):\n"
+    "- A long thin strip of blocks flush against an edge is usually a "
+    "timer/HUD bar, NOT clickable pieces. Do not click through it segment by "
+    "segment.\n"
+    "- Entities are connected same-color shapes. Actions' meanings vary per "
+    "game; infer them from what changed.\n"
+    "- When the goal is clear but the action order is not, SEARCH: write a "
+    "BFS/greedy plan in code.\n"
+    "You have two ways to act. Prefer CODE when search or computation helps:\n"
+    "1) Direct: reply\n"
+    "PLAN: <one line>\n"
+    "ACTIONS: <comma list, e.g. ACTION1, ACTION1, ACTION6 12 30>\n"
+    "   (ACTION6 needs 'ACTION6 <row> <col>').\n"
+    "2) Code: reply with a fenced python block. Inside it you have `grid` "
+    "(list[list[int]] rows), `objects` (list of dicts with color,n,center,"
+    "bbox,shape), `valid` (list of action-name strings), and you MUST build "
+    "a list `plan` of actions, each either 'ACTIONX' or ('ACTION6', row, "
+    "col). Example:\n"
+    "```python\n"
+    "plan = []\n"
+    "for o in objects:\n"
+    "    if o['n'] <= 4:\n"
+    "        plan.append(('ACTION6', o['center'][0], o['center'][1]))\n"
+    "plan = plan[:6]\n"
+    "```\n"
+    "Keep plans <= 8 actions. Output ONLY one of the two formats."
 )
 
 _ACT_RE = re.compile(r"ACTION\s*([1-7])(?:\s+(\d+)\s+(\d+))?", re.I)
 _RESET_RE = re.compile(r"\bRESET\b", re.I)
+_CODE_RE = re.compile(r"```(?:python)?\s*(.+?)```", re.S | re.I)
+
+_SAFE_BUILTINS = {
+    "range": range, "len": len, "min": min, "max": max, "abs": abs,
+    "sorted": sorted, "sum": sum, "list": list, "dict": dict, "set": set,
+    "tuple": tuple, "enumerate": enumerate, "zip": zip, "map": map,
+    "filter": filter, "any": any, "all": all, "int": int, "float": float,
+    "bool": bool, "str": str, "round": round, "reversed": reversed,
+}
 
 
 class LLMAgent(Agent):
     MAX_ACTIONS = 16000
-    LLM_SEQ_MAX = 6          # max actions taken from one LLM reply
-    LLM_STALL = 40           # LLM actions w/o score-up -> hand to fallback
-    FALLBACK_STINT = 60      # fallback actions before retrying the LLM
-    LLM_FAIL_CAP = 4         # consecutive LLM failures -> fallback for good
+    STALL_TRIGGER = 250     # prog actions w/o score-up -> call the LLM
+    LLM_SEQ_MAX = 8
+    RESCUE_BUDGET = 120     # actions the LLM stint gets before back to prog
+    LLM_FAIL_CAP = 6        # total LLM failures -> stop trying the LLM
+    MAX_LLM_CALLS = 40      # hard per-game cap (GPU time budget)
+    REQUERY_GAP = 6         # min actions between LLM queries within a rescue
 
     def __init__(self, *a: Any, **k: Any) -> None:
         super().__init__(*a, **k)
-        self.prog = ProgAgent(*a, **k)          # warm world model
+        self.prog = ProgAgent(*a, **k)
         try:
             self.client = _llmc.make_client()
         except Exception:                        # noqa: BLE001
@@ -75,19 +108,17 @@ class LLMAgent(Agent):
         self.last_scoreup = 0
         self.n = 0
         self.llm_fails = 0
-        self.fallback_until = 0
-        self.mode = "llm" if self.client is not None else "prog"
-        self._t0: Optional[float] = None
+        self.rescue_start = -10 ** 9
+        self.rescue_score0 = 0
+        self.n_llm_calls = 0
+        self._last_query = -10 ** 9
+        self.n_llm_actions = 0
 
-    # ---- framework contract ------------------------------------------
     def is_done(self, frames, latest_frame) -> bool:
         return latest_frame.state is GameState.WIN
 
     def choose_action(self, frames, latest_frame) -> GameAction:
         self.n += 1
-        if self._t0 is None:
-            self._t0 = time.time()
-        # keep the programmatic world model warm on EVERY frame
         try:
             prog_choice = self.prog.choose_action(frames, latest_frame)
         except Exception:                        # noqa: BLE001
@@ -97,40 +128,49 @@ class LLMAgent(Agent):
         score = getattr(latest_frame, "levels_completed", 0) or 0
         if score > self.prev_score:
             self.last_scoreup = self.n
-            self.queue.clear()                   # new level: replan
+            self.queue.clear()                   # progressed: drop LLM plan
         self.prev_score = score
 
-        # hard fallback conditions
-        if self.mode == "prog" or self.client is None \
-                or self.llm_fails >= self.LLM_FAIL_CAP \
-                or self.n < self.fallback_until:
-            return prog_choice if prog_choice is not None \
-                else self._safe_default(latest_frame)
+        in_rescue = self.n - self.rescue_start < self.RESCUE_BUDGET
+        # end a rescue stint early if it produced a score-up
+        if in_rescue and score > self.rescue_score0:
+            in_rescue = False
+            self.queue.clear()
 
-        # LLM stalled? hand to fallback for a stint
-        if self.n - self.last_scoreup > self.LLM_STALL:
-            self.fallback_until = self.n + self.FALLBACK_STINT
-            self.last_scoreup = self.n           # reset stall clock
-            return prog_choice if prog_choice is not None \
-                else self._safe_default(latest_frame)
+        want_llm = (
+            self.client is not None
+            and self.llm_fails < self.LLM_FAIL_CAP
+            and self.n_llm_calls < self.MAX_LLM_CALLS
+            and (in_rescue or (self.n - self.last_scoreup) >= self.STALL_TRIGGER)
+        )
 
-        # execute queued LLM actions
-        avail = self._avail(latest_frame)
-        if not self.queue:
-            self._query_llm(grid, avail, latest_frame)
-        while self.queue:
-            act = self.queue.popleft()
-            if any(a.name == act.name for a in avail):
-                self.history.append(act.name)
-                self.prev_grid = grid
-                return act
-        # queue empty/illegal -> fallback this turn
+        if want_llm:
+            if not in_rescue and not self.queue:
+                # start a new rescue stint
+                self.rescue_start = self.n
+                self.rescue_score0 = score
+                self._query_llm(grid, self._avail(latest_frame))
+            if not self.queue and in_rescue                     and self.n - self._last_query >= self.REQUERY_GAP:
+                self._query_llm(grid, self._avail(latest_frame))
+            avail = self._avail(latest_frame)
+            while self.queue:
+                act = self.queue.popleft()
+                if any(x.name == act.name for x in avail):
+                    self.history.append(act.name)
+                    self.prev_grid = grid
+                    self.n_llm_actions += 1
+                    return act
+            # nothing usable this frame; fall through to prog
+
+        self.prev_grid = grid
         return prog_choice if prog_choice is not None \
             else self._safe_default(latest_frame)
 
     # ---- LLM query ---------------------------------------------------
-    def _query_llm(self, grid, avail, frame) -> None:
+    def _query_llm(self, grid, avail) -> None:
         try:
+            self.n_llm_calls += 1
+            self._last_query = self.n
             last_change = None
             if self.prev_grid and grid and len(self.prev_grid) == len(grid):
                 last_change = sum(
@@ -140,14 +180,63 @@ class LLMAgent(Agent):
                      for a in avail]
             obs = _render.render_observation(grid, names, self.history,
                                              last_change)
-            reply = self.client.chat(SYSTEM_PROMPT, obs, max_tokens=256)
-            self.queue = self._parse(reply, avail)
-            self.llm_fails = 0 if self.queue else self.llm_fails + 1
+            reply = self.client.chat(SYSTEM_PROMPT, obs, max_tokens=384)
+            q = self._from_code(reply, grid, avail)
+            if not q:
+                q = self._parse(reply, avail)
+            self.queue = q
+            self.llm_fails = 0 if q else self.llm_fails + 1
         except Exception:                        # noqa: BLE001
             self.llm_fails += 1
             self.queue = deque()
 
-    def _parse(self, reply: str, avail) -> deque:
+    def _from_code(self, reply, grid, avail) -> deque:
+        m = _CODE_RE.search(reply)
+        if not m:
+            return deque()
+        code = m.group(1)
+        objs = _render.segment(grid)
+        # translate letter colors back to ints for convenience
+        env = {"grid": grid, "objects": objs,
+               "valid": [a.name for a in avail], "plan": []}
+        try:
+            exec(compile(code, "<llm>", "exec"),  # noqa: S102
+                 {"__builtins__": _SAFE_BUILTINS}, env)
+        except Exception:                         # noqa: BLE001
+            return deque()
+        return self._plan_to_actions(env.get("plan", []), avail)
+
+    def _plan_to_actions(self, plan, avail) -> deque:
+        legal = {a.name for a in avail}
+        out: deque = deque()
+        if not isinstance(plan, (list, tuple)):
+            return out
+        for item in plan:
+            name = None
+            row = col = None
+            if isinstance(item, str):
+                name = item.strip().upper()
+            elif isinstance(item, (list, tuple)) and item:
+                name = str(item[0]).strip().upper()
+                if len(item) >= 3:
+                    try:
+                        row, col = int(item[1]), int(item[2])
+                    except Exception:            # noqa: BLE001
+                        row = col = None
+            if not name or name not in legal:
+                continue
+            act = GameAction[name]
+            if act.is_complex():
+                if row is None:
+                    continue
+                row = max(0, min(63, row)); col = max(0, min(63, col))
+                act.set_data({"x": col, "y": row})
+            out.append(act)
+            if len(out) >= self.LLM_SEQ_MAX:
+                break
+        return out
+
+    def _parse(self, reply, avail) -> deque:
         legal = {a.name for a in avail}
         line = reply
         m = re.search(r"ACTIONS:\s*(.+)", reply, re.I | re.S)
@@ -170,8 +259,7 @@ class LLMAgent(Agent):
             if act.is_complex():
                 if am.group(2) is not None:
                     row, col = int(am.group(2)), int(am.group(3))
-                    row = max(0, min(63, row))
-                    col = max(0, min(63, col))
+                    row = max(0, min(63, row)); col = max(0, min(63, col))
                     act.set_data({"x": col, "y": row})
                 else:
                     continue
@@ -184,9 +272,7 @@ class LLMAgent(Agent):
     @staticmethod
     def _grid(frame) -> list:
         g = getattr(frame, "frame", None) or []
-        if not g:
-            return []
-        return [list(r) for r in g[-1]]
+        return [list(r) for r in g[-1]] if g else []
 
     def _avail(self, frame) -> list:
         raw = getattr(frame, "available_actions", None) or []
