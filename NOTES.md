@@ -459,3 +459,30 @@ fixes' local regressions just public-game trajectory luck? do genuinely
 correct fixes help the private set?" If v79 > 0.27 -> pursue correctness/
 generalization. If = 0.27 -> only the GPU/LLM architecture moves the LB.
 Daily task now submits kernel v19.
+
+## LLM-AGENT REBUILD (2026-08-26) — the GPU path
+Committed to the architecture change (leaders are all GPU LLM-agents).
+Built a tool-agent with a HARD PROGRAMMATIC FLOOR:
+  llm/llm_client.py  - 3 backends: mock / openai(vLLM) / hf(transformers)
+  llm/render.py      - board -> ASCII + object segmentation for the LLM
+  llm/agent.py       - LLMAgent: LLM proposes SHORT action sequences
+                       (inference too slow to call per-action); v79 runs
+                       underneath every frame and TAKES OVER on any LLM
+                       failure/stall. LLM can only ADD value; floor = 0.27.
+  build_llm_bundle.py-> my_agent_llm.py (single-file, v79 inlined)
+  build_notebook_llm.py -> notebooks_llm/ GPU kernel
+
+VALIDATED LOCALLY (no GPU here):
+  - mock backend: full loop + floor intact (vc33 L2, sp80 L1)
+  - real HF model (Qwen2.5-0.5B CPU): generates our PLAN/ACTIONS format,
+    parser extracts legal actions (6.4s/gen CPU; GPU 3B ~1-2s, sparse)
+  - bundle imports + plays clean
+
+KAGGLE: separate kernel baderalotaibi11/arc-agi-3-llm-agent (GPU T4,
+qwen-lm/qwen2.5 3b-instruct attached). v79 kernel stays the safe daily
+submitter. Model mount auto-located via glob for 3b-instruct/config.json.
+NEXT: watch the LLM kernel run; if it completes cleanly, submit it (it
+cannot score < 0.27 because the floor is inlined). If the 3B is too weak,
+step up to 7b-instruct. The real lever is adding a Python-tool sandbox
+(the Duck's key trick) so the LLM can BFS/search — that is what turns an
+LLM-agent from ~1 into 3+.
