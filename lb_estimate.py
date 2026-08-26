@@ -33,6 +33,9 @@ POINTS = [
     #                  public games. Public cascades (ar25 5.67, vc33 4.11)
     #                  do NOT replicate on the private 110. Local mean has
     #                  STOPPED predicting LB. Plateau ~0.27.
+    (0.406, 0.26),   # v79, 2026-08-26: v73 + correct bug fixes = 0.26.
+    #                  CONFIRMS: programmatic ceiling ~0.26-0.27. Even true
+    #                  correctness fixes don't generalize. LLM is the lever.
 ]
 
 
