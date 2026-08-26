@@ -511,3 +511,28 @@ inputs moved to model device. 7B fp16 ~15GB fits across the 2xT4.
 7B kernel builds clean, model mounts. Daily submit -> LLM kernel v3.
 v79 (55787954) still PENDING at last check; will read its score to
 confirm the 0.27 floor holds under the correctness fixes.
+
+## AUTO-ITERATE-ON-SCORE (2026-08-26)
+score_watch.sh (deployed at /home/bader/score_watch.sh) + a persistent
+Monitor poll Kaggle every 5 min and emit "SCORED <ref> score=<x>" on each
+NEW completed score. seen-file /tmp/arc_scored_seen.txt is pre-seeded with
+the two 0.27 refs so only NEW scores fire (v79 pending, then 7B LLM v3).
+
+ITERATION DECISION TREE when a SCORED event arrives:
+- v79 (correctness fixes) result:
+    > 0.27  -> correctness/generalization GENERALIZES to private set.
+              Build more generic-correctness improvements onto the floor.
+    = 0.27  -> confirms plateau; LLM path is the only lever. Proceed to 7B.
+- 7B LLM rescue-agent result:
+    > 0.27  -> LLM adds value. Enrich: (a) multi-turn probe-then-act (LLM
+              sees its probe's result before committing = the full Duck
+              loop), (b) raise MAX_LLM_CALLS if time allows, (c) tune
+              STALL_TRIGGER lower so it rescues sooner, (d) try 14B.
+    = 0.27  -> LLM never usefully fired. Diagnose: was it too slow on T4
+              (fell to floor every game)? -> switch to vLLM for speed, or
+              smaller/faster model. Or prompt too weak -> richer prompt +
+              force code-sandbox use. Check kernel rerun timing.
+    < 0.27  -> floor breached (design says impossible). Investigate the
+              fallback path; revert daily submit to submit_v79.cmd.
+Always: multi-seed local check any programmatic change; LLM changes get
+one Kaggle slot each (local proxy infeasible: CPU 1.5B = ~100s/gen).
