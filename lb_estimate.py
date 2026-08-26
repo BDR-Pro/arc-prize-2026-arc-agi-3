@@ -28,8 +28,11 @@ POINTS = [
     (0.004, 0.17),
     (0.142, 0.26),   # v54, 2026-08-22: k collapsed to ~1.8 -- easy-set advantage gone
     (0.240, 0.26),   # v67, 2026-08-23: 16k budget + arsenal = FLAT. k~1.1.
-    #                  Levels are worthless on the LB; only near-baseline
-    #                  solve speed scores.
+    (0.361, 0.27),   # v73, 2026-08-24/25 (BOTH submits = 0.27, reliable):
+    #                  local mean +50% -> LB +0.01. OVERFITTING the 25
+    #                  public games. Public cascades (ar25 5.67, vc33 4.11)
+    #                  do NOT replicate on the private 110. Local mean has
+    #                  STOPPED predicting LB. Plateau ~0.27.
 ]
 
 

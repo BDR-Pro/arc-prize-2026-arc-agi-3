@@ -440,3 +440,22 @@ requires the LLM-agent architecture on GPU. Decision for bader: accept
 the strong-but-not-winning programmatic agent, OR commit to the GPU/LLM
 rebuild (enable GPU kernel, attach Qwen-class model + vLLM wheelhouse,
 port a tool-agent loop). The latter is a different project.
+
+## PLATEAU FINDING (2026-08-26) — local no longer predicts LB
+v73 scored LB **0.27** (both Aug24 manual + Aug25 auto submits agree).
+Local mean went 0.24->0.36 (+50%) but LB moved 0.26->0.27 (+0.01).
+=> We are OVERFITTING the 25 public games. Their cascades (ar25 5.67,
+vc33 4.11) do not exist in the private 110. **Local eval has stopped
+predicting the LB — the feedback signal is broken.** Plateau ~0.27.
+
+Implication: every future submission must test a GENERALIZATION
+hypothesis (helps ANY game), not a local-mean gain. Public-game tuning
+is dead.
+
+EXPERIMENT IN FLIGHT: v79 (kernel v19, submitted 2026-08-26 06:57,
+PENDING) = v73 + two generically-correct fixes (color-0 click tier,
+empty-available guard). Local-neutral (0.406). Tests: "were the audit
+fixes' local regressions just public-game trajectory luck? do genuinely
+correct fixes help the private set?" If v79 > 0.27 -> pursue correctness/
+generalization. If = 0.27 -> only the GPU/LLM architecture moves the LB.
+Daily task now submits kernel v19.

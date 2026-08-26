@@ -914,7 +914,8 @@ class MyAgent(Agent):
         self._cur_grid = grid
         self._cur_counts = None
         available = self._available_actions(latest_frame)
-        self._record_available(available)
+        if getattr(latest_frame, "available_actions", None):
+            self._record_available(available)
         self._break_fixation()
 
         # -- Phase reseed: deterministic, but escape long no-progress ruts --
@@ -1001,37 +1002,8 @@ class MyAgent(Agent):
             names = sorted({a.name for a in available
                             if a is not GameAction.RESET
                             and not a.is_complex()})
-            # OPENING BOOK (from optimal-solution analysis of the public
-            # games: level-1 solutions are "walk straight k, interact" in
-            # 4-15 actions -- sp80 = RIGHT x3, ACTION5). Movement keys are
-            # ACTION1-4 by convention; 5/7 are interact keys. For each
-            # direction: walk 3, press each interact key once, continue;
-            # second pass walks 3 more. Every step also feeds the avatar
-            # model, so navigation converges inside the book.
-            moves = [n for n in names if n in ("ACTION1", "ACTION2",
-                                                "ACTION3", "ACTION4")]
-            inter = [n for n in names if n not in moves]
-            opp = {"ACTION1": "ACTION2", "ACTION2": "ACTION1",
-                   "ACTION3": "ACTION4", "ACTION4": "ACTION3"}
-            book: list[str] = []
-            for k in (3,):
-                for d in moves:
-                    book += [d] * k
-                    book += inter
-                    # return to the spawn point (ARC key convention
-                    # 1/2 = up/down, 3/4 = left/right) so every leg
-                    # starts from the same place
-                    if opp.get(d) in moves:
-                        book += [opp[d]] * k
-            if not moves:          # no movement keys: plain probe
-                book = [n for n in names for _ in range(3)]
-            self._probe_queue = deque(book)
+            self._probe_queue = deque(n for n in names for _ in range(3))
         if self._probe_queue:
-            # adaptive book: once the avatar/direction map has formed,
-            # navigation is the better driver -- stop the book. Games
-            # where detection never succeeds (sp80) get the full book.
-            if self.action_count > 14 and len(self.avm.direction_map()) >= 2:
-                self._probe_queue.clear()
             while self._probe_queue:
                 nm = self._probe_queue.popleft()
                 akey = ActionKey(GameAction[nm])
@@ -1399,6 +1371,10 @@ class MyAgent(Agent):
                     return grid[y][x]
                 return None
 
+            def color_key(t: tuple[int, int]) -> int:
+                c = color_at(t)
+                return -1 if c is None else c
+
             def dead_color(t: tuple[int, int]) -> bool:
                 c = color_at(t)
                 return c is not None and good.get(c, 0) == 0 \
@@ -1409,20 +1385,20 @@ class MyAgent(Agent):
             # learned from earlier levels apply to CLICKING too.
             centroids = _object_centroids(grid)
             tierG = [t for t in centroids
-                     if (color_at(t) or -1) in self.goal_colors]
+                     if color_key(t) in self.goal_colors]
             tier0 = list(self.mem.good_clicks)
             tierS = _symmetry_break_cells(grid)
             tier1 = [t for t in centroids
-                     if good.get(color_at(t) or -1, 0) > 0 and t not in tierG]
+                     if good.get(color_key(t), 0) > 0 and t not in tierG]
             tier2 = _enclosed_cells(grid) + \
                 [t for t in centroids if t not in tier1 and t not in tierG]
             if self.prev_grid and grid:
                 tier2 += _diff_cells(self.prev_grid, grid)
             self.rng.shuffle(tierG)
             self.rng.shuffle(tier0)
-            tier1.sort(key=lambda t: -(good.get(color_at(t) or -1, 0) + 1)
-                       / (good.get(color_at(t) or -1, 0)
-                          + bad.get(color_at(t) or -1, 0) + 2))
+            tier1.sort(key=lambda t: -(good.get(color_key(t), 0) + 1)
+                       / (good.get(color_key(t), 0)
+                          + bad.get(color_key(t), 0) + 2))
             self.rng.shuffle(tier2)
             tierT: list[tuple[int, int]] = []
             if self._desperate():

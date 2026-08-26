@@ -914,7 +914,8 @@ class MyAgent(Agent):
         self._cur_grid = grid
         self._cur_counts = None
         available = self._available_actions(latest_frame)
-        self._record_available(available)
+        if getattr(latest_frame, "available_actions", None):
+            self._record_available(available)
         self._break_fixation()
 
         # -- Phase reseed: deterministic, but escape long no-progress ruts --
@@ -1370,6 +1371,10 @@ class MyAgent(Agent):
                     return grid[y][x]
                 return None
 
+            def color_key(t: tuple[int, int]) -> int:
+                c = color_at(t)
+                return -1 if c is None else c
+
             def dead_color(t: tuple[int, int]) -> bool:
                 c = color_at(t)
                 return c is not None and good.get(c, 0) == 0 \
@@ -1380,20 +1385,20 @@ class MyAgent(Agent):
             # learned from earlier levels apply to CLICKING too.
             centroids = _object_centroids(grid)
             tierG = [t for t in centroids
-                     if (color_at(t) or -1) in self.goal_colors]
+                     if color_key(t) in self.goal_colors]
             tier0 = list(self.mem.good_clicks)
             tierS = _symmetry_break_cells(grid)
             tier1 = [t for t in centroids
-                     if good.get(color_at(t) or -1, 0) > 0 and t not in tierG]
+                     if good.get(color_key(t), 0) > 0 and t not in tierG]
             tier2 = _enclosed_cells(grid) + \
                 [t for t in centroids if t not in tier1 and t not in tierG]
             if self.prev_grid and grid:
                 tier2 += _diff_cells(self.prev_grid, grid)
             self.rng.shuffle(tierG)
             self.rng.shuffle(tier0)
-            tier1.sort(key=lambda t: -(good.get(color_at(t) or -1, 0) + 1)
-                       / (good.get(color_at(t) or -1, 0)
-                          + bad.get(color_at(t) or -1, 0) + 2))
+            tier1.sort(key=lambda t: -(good.get(color_key(t), 0) + 1)
+                       / (good.get(color_key(t), 0)
+                          + bad.get(color_key(t), 0) + 2))
             self.rng.shuffle(tier2)
             tierT: list[tuple[int, int]] = []
             if self._desperate():
