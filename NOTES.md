@@ -536,3 +536,19 @@ ITERATION DECISION TREE when a SCORED event arrives:
               fallback path; revert daily submit to submit_v79.cmd.
 Always: multi-seed local check any programmatic change; LLM changes get
 one Kaggle slot each (local proxy infeasible: CPU 1.5B = ~100s/gen).
+
+
+## 7B FIRST RESULT: 0.00 (CRASH) -> ROOT CAUSE FIXED (2026-08-27)
+The 7B LLM kernel scored 0.00 (a crash, BELOW the floor). Root cause:
+the framework Swarm (vendor/ARC-AGI-3-Agents/agents/swarm.py L76-90)
+creates ONE agent per game in ~110 CONCURRENT THREADS. My model load was
+in __init__ -> 110 simultaneous 7B loads -> GPU OOM -> kernel crash ->
+0.00. (This is exactly why the Duck runs a vLLM SERVER: load once.)
+FIX (kernel v4): llm_client is now a thread-safe module SINGLETON -- the
+model loads ONCE under a lock and is shared; generation serialized with a
+_GEN_LOCK (transformers .generate isn't thread-safe); a failed load caches
+None so all 110 threads fall to v79 (floor restored). Also MAX_LLM_CALLS
+40->12 and a 6h global deadline (rerun-time safety). Verified concurrency-
+safe under 20 threads locally. Daily submit -> LLM kernel v4.
+LESSON: the 'LLM can only add' guarantee only holds if model loading is a
+SINGLETON; per-instance loading in a threaded swarm is catastrophic.

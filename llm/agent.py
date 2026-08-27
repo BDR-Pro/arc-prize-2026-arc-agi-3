@@ -16,6 +16,8 @@ from __future__ import annotations
 import re
 import sys
 import time
+_MODULE_START = time.time()
+LLM_GLOBAL_DEADLINE_S = 21600  # 6h: after this, pure v79 (rerun-time safety)
 from collections import deque
 from pathlib import Path
 from typing import Any, Optional
@@ -91,7 +93,7 @@ class LLMAgent(Agent):
     LLM_SEQ_MAX = 8
     RESCUE_BUDGET = 120     # actions the LLM stint gets before back to prog
     LLM_FAIL_CAP = 6        # total LLM failures -> stop trying the LLM
-    MAX_LLM_CALLS = 40      # hard per-game cap (GPU time budget)
+    MAX_LLM_CALLS = 12      # per-game cap (shared model, 110 concurrent games)
     REQUERY_GAP = 6         # min actions between LLM queries within a rescue
 
     def __init__(self, *a: Any, **k: Any) -> None:
@@ -139,6 +141,7 @@ class LLMAgent(Agent):
 
         want_llm = (
             self.client is not None
+            and time.time() - _MODULE_START < LLM_GLOBAL_DEADLINE_S
             and self.llm_fails < self.LLM_FAIL_CAP
             and self.n_llm_calls < self.MAX_LLM_CALLS
             and (in_rescue or (self.n - self.last_scoreup) >= self.STALL_TRIGGER)

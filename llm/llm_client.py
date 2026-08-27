@@ -15,6 +15,7 @@ import json
 import os
 import time
 import urllib.request
+import threading
 from typing import Optional
 
 
@@ -116,8 +117,19 @@ class HFLocalLLM:
             raise LLMUnavailable(f"hf generate: {e}")
 
 
-def make_client():
-    backend = os.environ.get("ARC_LLM_BACKEND", "mock").lower()
+# ---------------------------------------------------------------------------
+# The framework's Swarm creates ONE agent per game in CONCURRENT THREADS.
+# A large model must be loaded ONCE and shared, or 110 simultaneous loads
+# OOM the GPU and crash the whole kernel (scored 0.00). This singleton
+# loads the backend once (thread-safe) and shares it; HF generation is
+# serialized with a lock (transformers .generate is not thread-safe).
+# ---------------------------------------------------------------------------
+_SHARED = {}
+_INIT_LOCK = threading.Lock()
+_GEN_LOCK = threading.Lock()
+
+
+def _make_backend(backend):
     if backend == "mock":
         return MockLLM()
     if backend == "openai":
@@ -125,3 +137,31 @@ def make_client():
     if backend == "hf":
         return HFLocalLLM()
     raise LLMUnavailable(f"unknown backend {backend}")
+
+
+class _SharedClient:
+    """Wraps the shared backend; serializes generation across threads."""
+
+    def __init__(self, inner):
+        self._inner = inner
+
+    def chat(self, system, user, max_tokens=512):
+        with _GEN_LOCK:
+            return self._inner.chat(system, user, max_tokens=max_tokens)
+
+
+def make_client():
+    backend = os.environ.get("ARC_LLM_BACKEND", "mock").lower()
+    with _INIT_LOCK:
+        if backend not in _SHARED:
+            # a failed load is cached as None so the other 109 threads do
+            # not each retry the expensive load; all fall back to prog.
+            try:
+                _SHARED[backend] = _make_backend(backend)
+            except Exception as e:  # noqa: BLE001
+                _SHARED[backend] = None
+                raise LLMUnavailable(str(e))
+        inner = _SHARED[backend]
+    if inner is None:
+        raise LLMUnavailable(f"{backend} previously failed to load")
+    return _SharedClient(inner)
