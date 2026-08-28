@@ -19,7 +19,7 @@ def sh(cmd):
 sh("nvidia-smi --query-gpu=name,memory.total --format=csv")
 
 # ---- 1. deps -------------------------------------------------------------
-sh("pip -q install vllm==0.6.3.post1 arc-agi 2>/dev/null || pip -q install vllm arc-agi")
+sh("pip -q install arc-agi accelerate transformers 2>&1 | tail -1")
 
 # ---- 2. get the code + games: clone the repo (always latest) -------------
 REPO = "https://github.com/BDR-Pro/arc-prize-2026-arc-agi-3"
@@ -38,29 +38,17 @@ gb = torch.cuda.get_device_properties(0).total_memory / 1e9
 MODEL = "Qwen/Qwen2.5-7B-Instruct" if gb >= 20 else "Qwen/Qwen2.5-3B-Instruct"
 print(f"GPU {gb:.0f}GB -> model {MODEL}")
 
-# ---- 4. start a vLLM OpenAI server in the background ---------------------
-srv = subprocess.Popen(
-    [sys.executable, "-m", "vllm.entrypoints.openai.api_server",
-     "--model", MODEL, "--port", "8000",
-     "--max-model-len", "4096", "--gpu-memory-utilization", "0.85"],
-    stdout=open("/content/vllm.log", "w"), stderr=subprocess.STDOUT)
-print("waiting for vLLM server...")
-import urllib.request
-for _ in range(120):
-    try:
-        urllib.request.urlopen("http://127.0.0.1:8000/v1/models", timeout=2)
-        print("vLLM up"); break
-    except Exception:
-        time.sleep(5)
-else:
-    print("vLLM did NOT start; tail of log:")
-    sh("tail -40 /content/vllm.log"); raise SystemExit
+# ---- 4. use transformers on the GPU (sequential eval; no server) --------
+# vLLM is only needed for Kaggle's 110 CONCURRENT games. This Colab eval
+# runs games sequentially, so the transformers backend on the GPU is
+# simpler and works on any Colab GPU including T4. The model is a
+# thread-safe singleton -> it loads once and is reused across all games.
+os.environ["ARC_LLM_BACKEND"] = "hf"
+os.environ["ARC_LLM_MODEL"] = MODEL
+print("backend=hf (transformers, GPU); model loads once on first LLM call")
 
 # ---- 5. eval both agents on the 25 games --------------------------------
-os.environ["ARC_LLM_BACKEND"] = "openai"
-os.environ["ARC_LLM_BASE_URL"] = "http://127.0.0.1:8000/v1"
-os.environ["ARC_LLM_MODEL"] = MODEL
-sys.path.insert(0, "/content/arc")
+sys.path.insert(0, os.getcwd())
 
 def eval_agent(agent_path, tag, max_actions=4000):
     import importlib, eval_harness
@@ -69,11 +57,12 @@ def eval_agent(agent_path, tag, max_actions=4000):
     games = sorted(d.name for d in Path("arc_games").iterdir() if d.is_dir())
     tot_score = tot_lv = 0
     per = {}
-    for g in games:
+    for i, g in enumerate(games):
         r = eval_harness.run_game(g, Path(agent_path), max_actions)
-        per[g] = (r.get("levels_completed", 0), r.get("score", 0.0))
-        tot_lv += r.get("levels_completed", 0)
-        tot_score += r.get("score", 0.0)
+        lv, sc = r.get("levels_completed", 0), r.get("score", 0.0)
+        per[g] = (lv, sc)
+        tot_lv += lv; tot_score += sc
+        print(f"  [{tag}] {i+1}/{len(games)} {g}: lv={lv} score={sc:.3f}", flush=True)
     mean = tot_score / max(len(games), 1)
     print(f"[{tag}] levels={tot_lv} mean={mean:.4f}")
     return tot_lv, mean, per
