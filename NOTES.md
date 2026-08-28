@@ -552,3 +552,48 @@ None so all 110 threads fall to v79 (floor restored). Also MAX_LLM_CALLS
 safe under 20 threads locally. Daily submit -> LLM kernel v4.
 LESSON: the 'LLM can only add' guarantee only holds if model loading is a
 SINGLETON; per-instance loading in a threaded swarm is catastrophic.
+
+
+## PIVOT: LLM-PRIMARY (Duck-style) (2026-08-28)
+Colab eval (transformers, Qwen2.5-3B) confirmed the RESCUE design is dead:
+LLM delta = +0.0000 mean, trajectories BYTE-IDENTICAL to the floor on all
+25 games. The 3B's output was rejected/unused every frame -> silent floor
+fallback (== what it does on the private set: LLM kernel v4 = 0.26).
+
+Re-read of the whole campaign: mean-first selection was ALREADY adopted
+(v71+). The wall is NOT the metric and NOT the LLM plumbing -- it is
+GENERALIZATION. Every speed trick that lifts local mean (winning-seq
+replay, last-win clicks, goal-color) is keyed to the 25 public games'
+structure; on the 110 private games none transfers. v73 local 0.24->0.36
+(+50%) but LB 0.26->0.27 (+0.01). Programmatic ceiling ~= LB 0.27.
+
+USER CHOSE (2026-08-28): commit to the Duck-style LLM-PRIMARY rebuild.
+Rationale: an LLM that solves by REASONING about the board uses a general
+skill -> success on public games is expected to transfer to private (the
+opposite of hand-tuned tricks). This is the one path with a shot at >1
+(real-LB frontier ~3.5, the Duck = 27B on H100).
+
+HARDWARE UNLOCK: 4-bit AWQ quantization. Qwen2.5-32B-Instruct-AWQ (~19GB)
+fits across Kaggle 2xT4 (32GB) via vLLM tensor-parallel-2 = Duck-class
+model on Kaggle hardware. 14B-AWQ (~9GB) fits one T4.
+
+NEW ARCH (llm/agent_primary.py -> my_agent_primary.py):
+- LLM DRIVES from turn 1 (not rescue-on-stall). Emits multi-action plans
+  via code block (BFS/greedy in sandbox) or direct ACTIONS: list.
+- Per-level FLOOR-OPENING window (default 100 actions): the floor opens
+  each level and keeps its cheap/lucky fast wins (ar25 lv0@74, vc33 lv0@5);
+  the LLM only takes levels the floor hasn't cracked in the window (those
+  scored ~0 on efficiency anyway). On LLM stall (STUCK_CALLS=40) the floor
+  resumes and mops up. => strictly >= floor in expectation. Verified:
+  mock(garbage)+opening=0 tanks ar25 to 0, opening=200 restores ar25=2/5.67.
+- llm_client: openai/vLLM backend NO LONGER serialized (only hf is). The
+  110 games must fire concurrent HTTP so vLLM batches them on-GPU -- a lock
+  there would make them sequential and defeat the server.
+
+DEPLOY PATH (pending Colab result): vLLM SERVER in the Kaggle kernel, AWQ
+model via model_sources, Swarm's 110 agents -> localhost:8000, floor intact.
+
+PENDING: user runs arc_colab_eval.ipynb on L4(14B)/A100(32B) and pastes the
+RESULT block. Decision: LLM-primary mean > floor 0.4059 -> port to Kaggle;
+else tune prompt/model. (Public-game mean IS a valid signal now because the
+LLM's skill is general, unlike the shelved heuristic tricks.)
