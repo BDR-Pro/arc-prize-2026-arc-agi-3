@@ -77,27 +77,62 @@ print(f"GPU {gb:.0f}GB x{n_gpu} -> model {MODEL}")
 PORT = 8000
 LOG = "/content/vllm_server.log"
 cmd = [
-    sys.executable, "-m", "vllm.entrypoints.openai.api_server",
-    "--model", MODEL,
+    "vllm", "serve", MODEL,            # canonical CLI (stable across versions)
     "--tensor-parallel-size", str(n_gpu),
     "--max-model-len", "4096",
     "--gpu-memory-utilization", "0.90",
     "--enforce-eager",                 # robust + memory-lean on T4/L4
     "--port", str(PORT),
-    "--disable-log-requests",
 ]
+# child MUST be unbuffered or its crash traceback never reaches the log file
+child_env = dict(os.environ, PYTHONUNBUFFERED="1",
+                 VLLM_LOGGING_LEVEL="DEBUG")
+
+
+def dump_log(tag):
+    print(f"\n!!! {tag}\n----- vllm_server.log -----")
+    try:
+        with open(LOG, encoding="utf-8", errors="replace") as fh:
+            txt = fh.read()
+        print(txt[-6000:] if txt.strip() else "(log is EMPTY)")
+    except Exception as e:  # noqa: BLE001
+        print("could not read log:", e)
+    print("---------------------------")
+
+
 print("+ launching vLLM server (log ->", LOG + "):")
 print("   " + " ".join(cmd))
 logf = open(LOG, "w")
-server = subprocess.Popen(cmd, stdout=logf, stderr=subprocess.STDOUT)
+try:
+    server = subprocess.Popen(cmd, stdout=logf, stderr=subprocess.STDOUT,
+                              env=child_env)
+except FileNotFoundError:
+    # `vllm` script not on PATH -> fall back to the module entrypoint
+    print("`vllm` not on PATH; falling back to python -m ...")
+    cmd = [sys.executable, "-m", "vllm.entrypoints.openai.api_server",
+           "--model", MODEL, "--tensor-parallel-size", str(n_gpu),
+           "--max-model-len", "4096", "--gpu-memory-utilization", "0.90",
+           "--enforce-eager", "--port", str(PORT)]
+    server = subprocess.Popen(cmd, stdout=logf, stderr=subprocess.STDOUT,
+                              env=child_env)
+
+def last_log_line():
+    try:
+        with open(LOG, encoding="utf-8", errors="replace") as fh:
+            lines = [ln for ln in fh.read().splitlines() if ln.strip()]
+        return lines[-1][:120] if lines else "(no output yet)"
+    except Exception:                  # noqa: BLE001
+        return "(log unreadable)"
+
 
 BASE = f"http://127.0.0.1:{PORT}/v1"
-DEADLINE = time.time() + 1200          # up to 20 min for download + load
+t_start = time.time()
+DEADLINE = t_start + 1800              # up to 30 min for download + load
 ready = False
+next_beat = t_start + 30
 while time.time() < DEADLINE:
     if server.poll() is not None:
-        print("\n!!! vLLM server EXITED early. Last 40 log lines:")
-        sh(f"tail -40 {LOG}")
+        dump_log(f"vLLM server EXITED early (return code {server.returncode})")
         raise SystemExit("vLLM server died during startup")
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/health",
@@ -107,10 +142,14 @@ while time.time() < DEADLINE:
                 break
     except Exception:                  # noqa: BLE001
         pass
+    if time.time() >= next_beat:
+        print(f"   ...loading {int(time.time()-t_start)}s | {last_log_line()}",
+              flush=True)
+        next_beat += 30
     time.sleep(5)
 if not ready:
-    print("\n!!! vLLM server did not become healthy in time. Last 40 lines:")
-    sh(f"tail -40 {LOG}")
+    server.terminate()
+    dump_log("vLLM server did not become healthy in time")
     raise SystemExit("vLLM startup timeout")
 print("vLLM server is HEALTHY.")
 
