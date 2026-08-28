@@ -233,6 +233,10 @@ class LLMPrimaryAgent(Agent):
                 q = self._parse(reply, avail)
             self.queue = q
             self.consec_fails = 0 if q else self.consec_fails + 1
+            if os.environ.get("ARC_LLM_DEBUG"):
+                snippet = " ".join(reply.split())[:220]
+                print(f"[LLMq lvl={self.prev_score} call#{self.n_llm_calls} "
+                      f"-> {len(q)} acts] {snippet}", flush=True)
         except Exception:                        # noqa: BLE001
             self.consec_fails += 1
             self.queue = deque()

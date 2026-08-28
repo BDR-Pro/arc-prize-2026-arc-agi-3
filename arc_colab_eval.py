@@ -1,27 +1,23 @@
-"""ARC-AGI-3 LLM-PRIMARY GPU eval for Google Colab (vLLM + AWQ).
+"""ARC-AGI-3 LLM-PRIMARY capability test for Colab (transformers backend).
 
-Tests the real question: does an LLM DRIVING the game (Duck-style) beat the
-programmatic floor on the 25 public games? Because the LLM solves by
-reasoning about the board (not memorised public-game tricks), success here
-is expected to transfer to the 110 private games -- unlike the heuristic
-speed tricks that plateaued at LB 0.27.
+We use plain transformers (NOT vLLM) here on purpose: vLLM's server kept
+dying on Colab's Python 3.13, and for a SEQUENTIAL eval (one game at a time)
+we don't need vLLM's concurrency -- that only matters for the 110-concurrent
+Kaggle deployment. This path is the one that already ran end-to-end.
 
-HOW TO USE (Colab):
-  1. Runtime -> Change runtime type -> GPU. Prefer **L4** (14B) or **A100**
-     (32B). T4 falls back to a 7B and is only a smoke test.
-  2. Run the cell. It clones the latest code, installs vLLM, serves a
-     quantized Qwen2.5 (AWQ) sized to the GPU, and evaluates the LLM-primary
-     agent vs the programmatic floor.
-  3. Copy the printed RESULT block back to Claude Code.
+The question: can a real ~14B model, DRIVING the game, crack levels the
+programmatic floor scores ~0 on -- while preserving the floor's fast wins?
+If yes on even a couple of games, reasoning transfers to the private set and
+we invest in the vLLM/Kaggle deployment. If no, we tune the model/prompt.
 
-Everything is auto-generated from this file by build_colab_notebook.py.
+HOW TO USE (Colab): GPU runtime (L4 24GB -> 14B; A100 -> 14B; T4 -> 7B).
+Run the cell, paste the RESULT block back to Claude Code.
 """
 import glob
 import os
 import subprocess
 import sys
 import time
-import urllib.request
 
 
 def sh(cmd, **kw):
@@ -45,170 +41,111 @@ else:
     os.chdir(DEST)
 print("code+games at:", os.getcwd(), "| games:", len(glob.glob("arc_games/*/")))
 
-# ---- 2. deps: arc engine + vLLM ------------------------------------------
-sh("pip -q install arc-agi 2>&1 | tail -2")
-sh("pip -q install vllm 2>&1 | tail -3")
+# ---- 2. deps: arc engine + transformers stack ----------------------------
+sh("pip -q install arc-agi transformers accelerate 2>&1 | tail -2")
+sh("pip -q install autoawq 2>&1 | tail -2")   # for 4-bit AWQ models
 try:
-    import vllm  # noqa: F401
-    print("vLLM version:", vllm.__version__)
+    import awq  # noqa: F401
+    AWQ_OK = True
 except Exception as e:  # noqa: BLE001
-    print("\n!!! vLLM IMPORT FAILED:", repr(e))
-    print("If this is a Python-version wheel issue, tell Claude the Python "
-          "version:", sys.version)
-    raise SystemExit("vLLM unavailable -- cannot run the LLM-primary eval")
+    AWQ_OK = False
+    print("autoawq unavailable ->", repr(e), "(will use an unquantized model)")
 
-# ---- 3. pick a quantized model by VRAM -----------------------------------
+# ---- 3. pick model by VRAM (+ AWQ availability) --------------------------
 import torch
-n_gpu = torch.cuda.device_count()
 gb = torch.cuda.get_device_properties(0).total_memory / 1e9
 if os.environ.get("ARC_LLM_MODEL"):
     MODEL = os.environ["ARC_LLM_MODEL"]
-elif gb >= 38:
-    MODEL = "Qwen/Qwen2.5-32B-Instruct-AWQ"
-elif gb >= 21:
-    MODEL = "Qwen/Qwen2.5-14B-Instruct-AWQ"
-elif gb >= 15:
-    MODEL = "Qwen/Qwen2.5-7B-Instruct-AWQ"
+elif AWQ_OK and gb >= 20:
+    MODEL = "Qwen/Qwen2.5-14B-Instruct-AWQ"       # ~9GB, best capability here
+elif gb >= 20:
+    MODEL = "Qwen/Qwen2.5-7B-Instruct"            # fp16 ~14GB, fits L4/A100
 else:
-    MODEL = "Qwen/Qwen2.5-3B-Instruct-AWQ"
-print(f"GPU {gb:.0f}GB x{n_gpu} -> model {MODEL}")
+    MODEL = "Qwen/Qwen2.5-3B-Instruct"            # T4 fallback
+print(f"GPU {gb:.0f}GB | autoawq={AWQ_OK} -> model {MODEL}")
 
-# ---- 4. launch the vLLM OpenAI server, log to file, poll /health ---------
-PORT = 8000
-LOG = "/content/vllm_server.log"
-cmd = [
-    "vllm", "serve", MODEL,            # canonical CLI (stable across versions)
-    "--tensor-parallel-size", str(n_gpu),
-    "--max-model-len", "4096",
-    "--gpu-memory-utilization", "0.90",
-    "--enforce-eager",                 # robust + memory-lean on T4/L4
-    "--port", str(PORT),
-]
-# child MUST be unbuffered or its crash traceback never reaches the log file
-child_env = dict(os.environ, PYTHONUNBUFFERED="1",
-                 VLLM_LOGGING_LEVEL="DEBUG")
-
-
-def dump_log(tag):
-    print(f"\n!!! {tag}\n----- vllm_server.log -----")
-    try:
-        with open(LOG, encoding="utf-8", errors="replace") as fh:
-            txt = fh.read()
-        print(txt[-6000:] if txt.strip() else "(log is EMPTY)")
-    except Exception as e:  # noqa: BLE001
-        print("could not read log:", e)
-    print("---------------------------")
-
-
-print("+ launching vLLM server (log ->", LOG + "):")
-print("   " + " ".join(cmd))
-logf = open(LOG, "w")
-try:
-    server = subprocess.Popen(cmd, stdout=logf, stderr=subprocess.STDOUT,
-                              env=child_env)
-except FileNotFoundError:
-    # `vllm` script not on PATH -> fall back to the module entrypoint
-    print("`vllm` not on PATH; falling back to python -m ...")
-    cmd = [sys.executable, "-m", "vllm.entrypoints.openai.api_server",
-           "--model", MODEL, "--tensor-parallel-size", str(n_gpu),
-           "--max-model-len", "4096", "--gpu-memory-utilization", "0.90",
-           "--enforce-eager", "--port", str(PORT)]
-    server = subprocess.Popen(cmd, stdout=logf, stderr=subprocess.STDOUT,
-                              env=child_env)
-
-def last_log_line():
-    try:
-        with open(LOG, encoding="utf-8", errors="replace") as fh:
-            lines = [ln for ln in fh.read().splitlines() if ln.strip()]
-        return lines[-1][:120] if lines else "(no output yet)"
-    except Exception:                  # noqa: BLE001
-        return "(log unreadable)"
-
-
-BASE = f"http://127.0.0.1:{PORT}/v1"
-t_start = time.time()
-DEADLINE = t_start + 1800              # up to 30 min for download + load
-ready = False
-next_beat = t_start + 30
-while time.time() < DEADLINE:
-    if server.poll() is not None:
-        dump_log(f"vLLM server EXITED early (return code {server.returncode})")
-        raise SystemExit("vLLM server died during startup")
-    try:
-        with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/health",
-                                    timeout=5) as r:
-            if r.status == 200:
-                ready = True
-                break
-    except Exception:                  # noqa: BLE001
-        pass
-    if time.time() >= next_beat:
-        print(f"   ...loading {int(time.time()-t_start)}s | {last_log_line()}",
-              flush=True)
-        next_beat += 30
-    time.sleep(5)
-if not ready:
-    server.terminate()
-    dump_log("vLLM server did not become healthy in time")
-    raise SystemExit("vLLM startup timeout")
-print("vLLM server is HEALTHY.")
-
-# ---- 5. point the agent at the server ------------------------------------
-os.environ["ARC_LLM_BACKEND"] = "openai"
-os.environ["ARC_LLM_BASE_URL"] = BASE
-os.environ["ARC_LLM_MODEL"] = MODEL
-os.environ["ARC_LLM_KEY"] = "EMPTY"
-os.environ["ARC_LLM_TIMEOUT"] = "60"
-
-# ---- 6. eval floor vs LLM-primary ----------------------------------------
+# ---- 4. backend=hf; PRELOAD the model once and warm-test it --------------
 sys.path.insert(0, os.getcwd())
-MAXACT = int(os.environ.get("ARC_EVAL_MAXACT", "4000"))
-# deployment-realistic: floor opens each level, LLM takes the hard ones
+sys.path.insert(0, os.path.join(os.getcwd(), "llm"))
+os.environ["ARC_LLM_BACKEND"] = "hf"
+
+
+def preload(model_id):
+    """Load model_id into the shared cache; return a warm-up reply."""
+    os.environ["ARC_LLM_MODEL"] = model_id
+    cache = getattr(sys, "_ARC_LLM_SHARED", None)
+    if cache:
+        cache.pop("hf", None)            # evict any prior/failed load
+    import importlib
+    import llm_client
+    importlib.reload(llm_client)
+    c = llm_client.make_client()
+    return c.chat("You are a test.", "Reply with exactly: OK", max_tokens=8)
+
+
+try:
+    print("warm-up reply:", repr(preload(MODEL)))
+except Exception as e:  # noqa: BLE001
+    print("!!! model load FAILED:", repr(e), "-> falling back to 7B fp16")
+    MODEL = "Qwen/Qwen2.5-7B-Instruct"
+    print("warm-up reply:", repr(preload(MODEL)))
+print("model ready:", MODEL)
+
+# ---- 5. eval floor vs LLM-primary on a focused subset --------------------
+# default: a few games the floor scores ~0 on (room for the LLM) + two of
+# the floor's fast wins (ar25, vc33) to confirm the LLM doesn't break them.
+DEFAULT_SET = "dc22,ka59,sb26,su15,cd82,ar25,vc33"
+sel = os.environ.get("ARC_EVAL_GAMES", DEFAULT_SET)
+from pathlib import Path
+ALL = sorted(d.name for d in Path("arc_games").iterdir() if d.is_dir())
+GAMES = ALL if sel == "all" else [g for g in sel.split(",") if g in ALL]
+
+MAXACT = int(os.environ.get("ARC_EVAL_MAXACT", "2000"))
+os.environ.setdefault("ARC_LLM_MAX_CALLS", "40")   # per-game LLM budget
+os.environ.setdefault("ARC_LLM_MAX_TOKENS", "384")
 os.environ.setdefault("ARC_LLM_FLOOR_OPENING", "100")
+os.environ.setdefault("ARC_LLM_DEBUG", "1")        # show the model's replies
+print(f"games={GAMES} max_actions={MAXACT} "
+      f"llm_calls<={os.environ['ARC_LLM_MAX_CALLS']}")
 
 
 def eval_agent(agent_path, tag):
     import importlib
     import eval_harness
     importlib.reload(eval_harness)
-    from pathlib import Path
-    games = sorted(d.name for d in Path("arc_games").iterdir() if d.is_dir())
     tot_score = tot_lv = 0
     per = {}
-    for i, g in enumerate(games):
+    for i, g in enumerate(GAMES):
         r = eval_harness.run_game(g, Path(agent_path), MAXACT)
         lv, sc = r.get("levels_completed", 0), r.get("score", 0.0)
         per[g] = (lv, sc)
         tot_lv += lv
         tot_score += sc
-        print(f"  [{tag}] {i+1}/{len(games)} {g}: lv={lv} score={sc:.3f}",
+        print(f"  [{tag}] {i+1}/{len(GAMES)} {g}: lv={lv} score={sc:.3f}",
               flush=True)
-    mean = tot_score / max(len(games), 1)
+    mean = tot_score / max(len(GAMES), 1)
     print(f"[{tag}] levels={tot_lv} mean={mean:.4f}")
     return tot_lv, mean, per
 
 
-try:
-    print("\n=== evaluating programmatic floor (v79) ===")
-    p_lv, p_mean, p_per = eval_agent("my_agent.py", "PROG")
-    print(f"\n=== evaluating LLM-PRIMARY (opening="
-          f"{os.environ['ARC_LLM_FLOOR_OPENING']}, model {MODEL}) ===")
-    l_lv, l_mean, l_per = eval_agent("my_agent_primary.py", "LLM")
+print("\n=== evaluating programmatic floor (v79) ===")
+p_lv, p_mean, p_per = eval_agent("my_agent.py", "PROG")
+print(f"\n=== evaluating LLM-PRIMARY ({MODEL}) ===")
+l_lv, l_mean, l_per = eval_agent("my_agent_primary.py", "LLM")
 
-    print("\n" + "=" * 52)
-    print("RESULT (paste this back to Claude Code):")
-    print(f"  model={MODEL}  gpu={gb:.0f}GBx{n_gpu}")
-    print(f"  PROG floor  : levels={p_lv} mean={p_mean:.4f}")
-    print(f"  LLM primary : levels={l_lv} mean={l_mean:.4f}")
-    print(f"  LLM delta   : {l_mean - p_mean:+.4f} mean, "
-          f"{l_lv - p_lv:+d} levels")
-    print("  per-game changes (game: prog_lv/score -> llm_lv/score):")
-    for g in sorted(p_per):
-        if p_per[g] != l_per[g]:
-            arrow = "UP" if l_per[g][1] > p_per[g][1] else "DOWN"
-            print(f"    [{arrow}] {g}: {p_per[g][0]}/{p_per[g][1]:.3f} -> "
-                  f"{l_per[g][0]}/{l_per[g][1]:.3f}")
-    print("=" * 52)
-finally:
-    server.terminate()
-    print("vLLM server stopped.")
+print("\n" + "=" * 52)
+print("RESULT (paste this back to Claude Code):")
+print(f"  model={MODEL}  gpu={gb:.0f}GB  games={len(GAMES)}")
+print(f"  PROG floor  : levels={p_lv} mean={p_mean:.4f}")
+print(f"  LLM primary : levels={l_lv} mean={l_mean:.4f}")
+print(f"  LLM delta   : {l_mean - p_mean:+.4f} mean, {l_lv - p_lv:+d} levels")
+print("  per-game (game: prog_lv/score -> llm_lv/score):")
+for g in GAMES:
+    mark = ""
+    if l_per[g][1] > p_per[g][1] + 1e-9:
+        mark = "  <== LLM WIN"
+    elif l_per[g][1] < p_per[g][1] - 1e-9:
+        mark = "  <== regressed"
+    print(f"    {g}: {p_per[g][0]}/{p_per[g][1]:.3f} -> "
+          f"{l_per[g][0]}/{l_per[g][1]:.3f}{mark}")
+print("=" * 52)

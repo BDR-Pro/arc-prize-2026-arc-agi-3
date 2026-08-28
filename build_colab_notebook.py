@@ -10,22 +10,24 @@ HERE = Path(__file__).resolve().parent
 code = (HERE / "arc_colab_eval.py").read_text(encoding="utf-8")
 
 md = (
-    "# ARC-AGI-3 LLM-PRIMARY GPU Eval (Colab)\n\n"
-    "Tests whether an LLM **driving** the game (Duck-style) beats the "
-    "programmatic floor. The LLM solves by *reasoning about the board*, so "
-    "success here should transfer to the private set — unlike the "
-    "heuristic tricks that plateaued at LB 0.27.\n\n"
-    "1. **Runtime -> Change runtime type -> GPU.** Prefer **L4** (runs a 14B) "
-    "or **A100** (32B). T4 falls back to a 7B and is only a smoke test.\n"
-    "2. Run the cell below. It clones the latest code, installs vLLM, serves "
-    "a quantized Qwen2.5 (AWQ) sized to the GPU, and evaluates the "
-    "**LLM-primary agent vs the programmatic floor** on the 25 public "
-    "games. If vLLM fails to start it prints the server log so we can see "
-    "why.\n"
+    "# ARC-AGI-3 LLM-PRIMARY Capability Test (Colab)\n\n"
+    "Tests whether a real ~14B model **driving** the game (Duck-style) can "
+    "crack levels the programmatic floor scores ~0 on — while preserving "
+    "the floor's fast wins. The LLM solves by *reasoning about the board*, "
+    "so success should transfer to the private set, unlike the heuristic "
+    "tricks that plateaued at LB 0.27.\n\n"
+    "Uses the **transformers** backend (not vLLM — that's only needed for "
+    "the 110-concurrent Kaggle deployment and was crashing on Colab).\n\n"
+    "1. **Runtime -> Change runtime type -> GPU.** **L4** or **A100** runs "
+    "the 14B (AWQ). T4 falls back to 7B/3B.\n"
+    "2. Run the cell. It clones the latest code, loads the model once, and "
+    "evaluates the **LLM-primary agent vs the floor** on a focused subset "
+    "(a few floor-zero games + ar25/vc33 as protect-checks). The model's "
+    "own replies are printed so we can see its reasoning.\n"
     "3. Copy the printed **RESULT** block back to Claude Code.\n\n"
     "_Auto-generated on every commit; always pulls the latest agent from "
-    "GitHub. Optional: add an `HF_TOKEN` Colab secret for faster model "
-    "downloads._"
+    "GitHub. To run all 25 games set `ARC_EVAL_GAMES=all`. Optional: add an "
+    "`HF_TOKEN` Colab secret for faster downloads._"
 )
 
 nb = {

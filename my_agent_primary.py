@@ -2163,6 +2163,7 @@ programmatic agent.
 """
 import json
 import os
+import sys
 import time
 import urllib.request
 import threading
@@ -2311,18 +2312,32 @@ class _SharedClient:
         return self._inner.chat(system, user, max_tokens=max_tokens)
 
 
+def _shared_cache():
+    # Store the loaded backend on the `sys` module so it survives per-game
+    # module re-exec in eval_harness (which would otherwise reload a 14B
+    # model 25 times). On Kaggle the module is imported once, so this is a
+    # plain singleton there. Same dict is seen by the standalone module and
+    # the inlined bundle copy, so a preload is reused by the agent.
+    cache = getattr(sys, "_ARC_LLM_SHARED", None)
+    if cache is None:
+        cache = {}
+        sys._ARC_LLM_SHARED = cache
+    return cache
+
+
 def make_client():
     backend = os.environ.get("ARC_LLM_BACKEND", "mock").lower()
+    cache = _shared_cache()
     with _INIT_LOCK:
-        if backend not in _SHARED:
+        if backend not in cache:
             # a failed load is cached as None so the other 109 threads do
             # not each retry the expensive load; all fall back to prog.
             try:
-                _SHARED[backend] = _make_backend(backend)
+                cache[backend] = _make_backend(backend)
             except Exception as e:  # noqa: BLE001
-                _SHARED[backend] = None
+                cache[backend] = None
                 raise LLMUnavailable(str(e))
-        inner = _SHARED[backend]
+        inner = cache[backend]
     if inner is None:
         raise LLMUnavailable(f"{backend} previously failed to load")
     # only the in-process HF model needs the serializing lock; the vLLM
@@ -2561,6 +2576,10 @@ class LLMPrimaryAgent(Agent):
                 q = self._parse(reply, avail)
             self.queue = q
             self.consec_fails = 0 if q else self.consec_fails + 1
+            if os.environ.get("ARC_LLM_DEBUG"):
+                snippet = " ".join(reply.split())[:220]
+                print(f"[LLMq lvl={self.prev_score} call#{self.n_llm_calls} "
+                      f"-> {len(q)} acts] {snippet}", flush=True)
         except Exception:                        # noqa: BLE001
             self.consec_fails += 1
             self.queue = deque()
