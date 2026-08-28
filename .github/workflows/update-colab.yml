@@ -5,6 +5,7 @@ name: Update Colab runbook
 # the Colab runbook (which clones this repo) always runs the latest agent.
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
