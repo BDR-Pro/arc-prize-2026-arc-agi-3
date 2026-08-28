@@ -2513,6 +2513,8 @@ class LLMPrimaryAgent(Agent):
         self.last_click_rc = None     # (row,col) of the last click executed
         self.dead_counts = {}         # simple-action name -> consec no-change
         self.click_effect = {}        # (row,col) -> last cells-changed by a click
+        self.click_count = {}         # (row,col) -> times clicked
+        self._banned_cells = set()    # cells the LLM may not click any more
         self.grid_at_query = None     # board snapshot at the last LLM query
         self.floor_only = False       # latched once we hand the game to prog
 
@@ -2557,8 +2559,10 @@ class LLMPrimaryAgent(Agent):
                     self.dead_counts[self.last_act_name] = 0
             elif self.last_click_rc and self.last_click_rc[0] is not None:
                 # remember what clicking THIS cell did (so we can tell the LLM
-                # and stop it re-clicking dead cells)
+                # and stop it re-clicking dead / over-clicked cells)
                 self.click_effect[self.last_click_rc] = self.last_change
+                self.click_count[self.last_click_rc] = \
+                    self.click_count.get(self.last_click_rc, 0) + 1
 
         score = getattr(latest_frame, "levels_completed", 0) or 0
         if score > self.prev_score:
@@ -2640,16 +2644,19 @@ class LLMPrimaryAgent(Agent):
             if dead:
                 notes.append("USELESS actions (changed 0 cells every time) -- "
                              "NEVER pick these: " + ", ".join(dead))
-            # cells already clicked that did nothing -> forbid re-clicking them
-            dead_clicks = sorted(rc for rc, ch in self.click_effect.items()
-                                 if ch == 0)
-            if dead_clicks:
-                shown = ", ".join(f"({r},{c})" for r, c in dead_clicks[:16])
-                more = "" if len(dead_clicks) <= 16 \
-                    else f" (+{len(dead_clicks) - 16} more)"
-                notes.append(f"DEAD CELLS already clicked (changed nothing) -- "
-                             f"do NOT click these again, pick UNTRIED cells: "
-                             f"{shown}{more}")
+            # cells that changed nothing, OR were clicked 3+ times already ->
+            # banned. Re-clicking teaches nothing; force the model elsewhere.
+            self._banned_cells = {
+                rc for rc, ch in self.click_effect.items() if ch == 0
+            } | {rc for rc, n in self.click_count.items() if n >= 3}
+            if self._banned_cells:
+                banned = sorted(self._banned_cells)
+                shown = ", ".join(f"({r},{c})" for r, c in banned[:16])
+                more = "" if len(banned) <= 16 \
+                    else f" (+{len(banned) - 16} more)"
+                notes.append(f"BANNED cells (dead, or already clicked enough) "
+                             f"-- clicks on these are IGNORED, so pick UNTRIED "
+                             f"cells: {shown}{more}")
             obs = "\n".join(notes) + "\n" + render_observation(
                 grid, names, self.history, self.last_change)
             reply = self.client.chat(SYSTEM_PROMPT, obs,
@@ -2706,6 +2713,8 @@ class LLMPrimaryAgent(Agent):
                 if row is None:
                     continue
                 row = max(0, min(63, row)); col = max(0, min(63, col))
+                if (row, col) in self._banned_cells:
+                    continue                     # hard-drop banned clicks
                 act.set_data({"x": col, "y": row})
             out.append(act)
             if len(out) >= self.LLM_SEQ_MAX:
@@ -2736,6 +2745,8 @@ class LLMPrimaryAgent(Agent):
                 if am.group(2) is not None:
                     row, col = int(am.group(2)), int(am.group(3))
                     row = max(0, min(63, row)); col = max(0, min(63, col))
+                    if (row, col) in self._banned_cells:
+                        continue                 # hard-drop banned clicks
                     act.set_data({"x": col, "y": row})
                 else:
                     continue
