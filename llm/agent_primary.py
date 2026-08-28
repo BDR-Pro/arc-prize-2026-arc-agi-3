@@ -146,6 +146,9 @@ class LLMPrimaryAgent(Agent):
         self.calls_this_level = 0     # LLM calls since last level-up
         self.level_start_n = 0        # frame index at the last level-up
         self.last_change = None
+        self.last_act_name = None     # action executed on the previous frame
+        self.dead_counts = {}         # simple-action name -> consec no-change
+        self.grid_at_query = None     # board snapshot at the last LLM query
         self.floor_only = False       # latched once we hand the game to prog
 
     def is_done(self, frames, latest_frame) -> bool:
@@ -164,8 +167,8 @@ class LLMPrimaryAgent(Agent):
         if latest_frame.state in (GameState.NOT_PLAYED, GameState.GAME_OVER):
             # let the floor own reset/retry bookkeeping
             self.queue.clear()
-            return prog_choice if prog_choice is not None \
-                else GameAction.RESET
+            return self._ret(prog_choice if prog_choice is not None
+                             else GameAction.RESET)
 
         grid = self._grid(latest_frame)
         # measure what our previous action did
@@ -174,6 +177,19 @@ class LLMPrimaryAgent(Agent):
                 1 for r0, r1 in zip(self.prev_grid, grid)
                 for a, b in zip(r0, r1) if a != b)
         self.prev_grid = grid
+        # attribute the change to the previously-executed action; a simple
+        # (non-click) action that repeatedly changes nothing is inert here
+        if self.last_act_name and self.last_change is not None:
+            try:
+                cplx = GameAction[self.last_act_name].is_complex()
+            except Exception:                    # noqa: BLE001
+                cplx = True
+            if not cplx:
+                if self.last_change == 0:
+                    self.dead_counts[self.last_act_name] = \
+                        self.dead_counts.get(self.last_act_name, 0) + 1
+                else:
+                    self.dead_counts[self.last_act_name] = 0
 
         score = getattr(latest_frame, "levels_completed", 0) or 0
         if score > self.prev_score:
@@ -204,27 +220,44 @@ class LLMPrimaryAgent(Agent):
 
         if want_llm:
             if not self.queue:
-                self._query_llm(grid, avail)
+                # did our previous plan change anything? (stuck detector)
+                stuck = (self.grid_at_query is not None
+                         and grid == self.grid_at_query)
+                dead = sorted(n for n, c in self.dead_counts.items() if c >= 3)
+                self.grid_at_query = grid
+                self._query_llm(grid, avail, dead, stuck)
             while self.queue:
                 act = self.queue.popleft()
                 if any(x.name == act.name for x in avail):
                     self.history.append(act.name)
-                    return act
+                    return self._ret(act)
             # LLM produced nothing usable this frame -> floor for this frame
 
-        return prog_choice if prog_choice is not None \
-            else self._safe_default(latest_frame)
+        return self._ret(prog_choice if prog_choice is not None
+                         else self._safe_default(latest_frame))
+
+    def _ret(self, action):
+        self.last_act_name = getattr(action, "name", None)
+        return action
 
     # ---- LLM query ---------------------------------------------------
-    def _query_llm(self, grid, avail) -> None:
+    def _query_llm(self, grid, avail, dead=(), stuck=False) -> None:
         try:
             self.n_llm_calls += 1
             self.calls_this_level += 1
             names = [a.name + ("(row col)" if a.is_complex() else "")
                      for a in avail]
-            level_note = (f"CURRENT LEVEL {self.prev_score}. "
-                          f"LLM calls on this level: {self.calls_this_level}.")
-            obs = level_note + "\n" + _render.render_observation(
+            notes = [f"CURRENT LEVEL {self.prev_score}. "
+                     f"LLM calls on this level: {self.calls_this_level}."]
+            if stuck:
+                notes.append("!! Your LAST plan changed the board by 0 cells "
+                             "-- it did NOTHING. Do something DIFFERENT: a "
+                             "different action, or ACTION6 clicks on specific "
+                             "object centers listed below. Do NOT repeat it.")
+            if dead:
+                notes.append("USELESS here (each changed 0 cells every time "
+                             "tried) -- NEVER pick these: " + ", ".join(dead))
+            obs = "\n".join(notes) + "\n" + _render.render_observation(
                 grid, names, self.history, self.last_change)
             reply = self.client.chat(SYSTEM_PROMPT, obs,
                                      max_tokens=self.MAX_TOKENS)

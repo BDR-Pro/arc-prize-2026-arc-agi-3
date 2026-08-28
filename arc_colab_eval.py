@@ -42,7 +42,11 @@ else:
 print("code+games at:", os.getcwd(), "| games:", len(glob.glob("arc_games/*/")))
 
 # ---- 2. deps: arc engine + transformers stack ----------------------------
-sh("pip -q install arc-agi transformers accelerate bitsandbytes 2>&1 | tail -2")
+sh("pip -q install arc-agi transformers accelerate bitsandbytes hf_transfer 2>&1 | tail -2")
+# robust model downloads: faster transfer + a generous read timeout (the 14B
+# is ~9GB and Colab's default 10s read timeout can trip mid-download)
+os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
+os.environ["HF_HUB_DOWNLOAD_TIMEOUT"] = "60"
 # Colab (py3.13) ships a torchvision that imports a BROKEN Pillow
 # (PIL.ImageText -> _Ink). transformers imports torchvision eagerly via its
 # object-detection loss modules, so even a TEXT model load dies there. A text
@@ -90,19 +94,34 @@ def preload(model_id):
     return c.chat("You are a test.", "Reply with exactly: OK", max_tokens=8)
 
 
+def preload_retry(model_id, tries=3):
+    last = None
+    for i in range(tries):
+        try:
+            return preload(model_id)
+        except Exception as e:  # noqa: BLE001
+            last = e
+            print(f"  load attempt {i+1}/{tries} failed: {e} (retrying; HF "
+                  f"resumes from cache)", flush=True)
+            time.sleep(5)
+    raise last
+
+
 try:
-    print("warm-up reply:", repr(preload(MODEL)))
+    print("warm-up reply:", repr(preload_retry(MODEL)))
 except Exception as e:  # noqa: BLE001
-    print("!!! model load FAILED:", repr(e), "-> falling back to 7B fp16")
+    print("!!! target load FAILED after retries:", repr(e), "-> 7B fp16")
     os.environ.pop("ARC_LLM_LOAD_4BIT", None)   # pure fp16, most robust
     MODEL = "Qwen/Qwen2.5-7B-Instruct"
-    print("warm-up reply:", repr(preload(MODEL)))
+    print("warm-up reply:", repr(preload_retry(MODEL)))
 print("model ready:", MODEL)
 
 # ---- 5. eval floor vs LLM-primary on a focused subset --------------------
 # default: a few games the floor scores ~0 on (room for the LLM) + two of
 # the floor's fast wins (ar25, vc33) to confirm the LLM doesn't break them.
-DEFAULT_SET = "dc22,ka59,sb26,su15,cd82,ar25,vc33"
+# smaller default so the (slower) 14B test finishes fast: 3 floor-zero games
+# + ar25 as a protect-check. Set ARC_EVAL_GAMES for more, or =all for 25.
+DEFAULT_SET = "dc22,ka59,su15,ar25"
 sel = os.environ.get("ARC_EVAL_GAMES", DEFAULT_SET)
 from pathlib import Path
 ALL = sorted(d.name for d in Path("arc_games").iterdir() if d.is_dir())
