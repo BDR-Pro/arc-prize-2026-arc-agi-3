@@ -21,13 +21,13 @@ md = (
     "1. **Runtime -> Change runtime type -> GPU.** **L4** or **A100** runs "
     "the 14B (AWQ). T4 falls back to 7B/3B.\n"
     "2. Run the cell. It clones the latest code, loads the model once, and "
-    "evaluates the **LLM-primary agent vs the floor** on a focused subset "
-    "(a few floor-zero games + ar25/vc33 as protect-checks). The model's "
+    "evaluates the **LLM-primary agent vs the floor** on **all 25 games** "
+    "(the 14B on 25 games is slow, ~2-3h — leave the tab open). The model's "
     "own replies are printed so we can see its reasoning.\n"
     "3. Copy the printed **RESULT** block back to Claude Code.\n\n"
     "_Auto-generated on every commit; always pulls the latest agent from "
-    "GitHub. To run all 25 games set `ARC_EVAL_GAMES=all`. Optional: add an "
-    "`HF_TOKEN` Colab secret for faster downloads._"
+    "GitHub. For a quick run set e.g. `ARC_EVAL_GAMES=dc22,ka59,su15`. "
+    "Optional: add an `HF_TOKEN` Colab secret for faster downloads._"
 )
 
 nb = {

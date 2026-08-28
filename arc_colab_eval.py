@@ -119,12 +119,13 @@ print("model ready:", MODEL)
 # ---- 5. eval floor vs LLM-primary on a focused subset --------------------
 # default: a few games the floor scores ~0 on (room for the LLM) + two of
 # the floor's fast wins (ar25, vc33) to confirm the LLM doesn't break them.
-# smaller default so the (slower) 14B test finishes fast: 3 floor-zero games
-# + ar25 as a protect-check. Set ARC_EVAL_GAMES for more, or =all for 25.
-DEFAULT_SET = "dc22,ka59,su15,ar25"
-sel = os.environ.get("ARC_EVAL_GAMES", DEFAULT_SET)
+# default: ALL 25 games -- every floor-zero game gets a chance to be cracked,
+# and the winners confirm no regression. Set ARC_EVAL_GAMES="g1,g2" to narrow
+# for a quick run. (14B on 25 games is slow, ~2-3h; run it when you can leave
+# the tab open.)
 from pathlib import Path
 ALL = sorted(d.name for d in Path("arc_games").iterdir() if d.is_dir())
+sel = os.environ.get("ARC_EVAL_GAMES", "all")
 GAMES = ALL if sel == "all" else [g for g in sel.split(",") if g in ALL]
 
 MAXACT = int(os.environ.get("ARC_EVAL_MAXACT", "2000"))
