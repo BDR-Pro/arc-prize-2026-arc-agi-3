@@ -10,15 +10,22 @@ HERE = Path(__file__).resolve().parent
 code = (HERE / "arc_colab_eval.py").read_text(encoding="utf-8")
 
 md = (
-    "# ARC-AGI-3 LLM-Agent GPU Eval (Colab)\n\n"
-    "1. **Runtime -> Change runtime type -> GPU** (L4 or A100 for the 7B; "
-    "T4 falls back to 3B).\n"
-    "2. Run the cell below. It clones the latest code, installs vLLM, "
-    "serves the model, and evaluates the **LLM rescue-agent vs the "
-    "programmatic floor** on the 25 public games.\n"
+    "# ARC-AGI-3 LLM-PRIMARY GPU Eval (Colab)\n\n"
+    "Tests whether an LLM **driving** the game (Duck-style) beats the "
+    "programmatic floor. The LLM solves by *reasoning about the board*, so "
+    "success here should transfer to the private set — unlike the "
+    "heuristic tricks that plateaued at LB 0.27.\n\n"
+    "1. **Runtime -> Change runtime type -> GPU.** Prefer **L4** (runs a 14B) "
+    "or **A100** (32B). T4 falls back to a 7B and is only a smoke test.\n"
+    "2. Run the cell below. It clones the latest code, installs vLLM, serves "
+    "a quantized Qwen2.5 (AWQ) sized to the GPU, and evaluates the "
+    "**LLM-primary agent vs the programmatic floor** on the 25 public "
+    "games. If vLLM fails to start it prints the server log so we can see "
+    "why.\n"
     "3. Copy the printed **RESULT** block back to Claude Code.\n\n"
-    "_This notebook is auto-generated on every commit; it always pulls the "
-    "latest agent from GitHub._"
+    "_Auto-generated on every commit; always pulls the latest agent from "
+    "GitHub. Optional: add an `HF_TOKEN` Colab secret for faster model "
+    "downloads._"
 )
 
 nb = {

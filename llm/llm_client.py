@@ -140,14 +140,25 @@ def _make_backend(backend):
 
 
 class _SharedClient:
-    """Wraps the shared backend; serializes generation across threads."""
+    """Wraps the shared backend.
 
-    def __init__(self, inner):
+    serialize=True (hf): transformers .generate is not thread-safe, so all
+    110 game threads must go through one lock -> sequential generation.
+
+    serialize=False (openai/vLLM): the server batches concurrent requests on
+    the GPU. Locking here would defeat that and make 110 games sequential,
+    which is the whole reason to use a server. So concurrent HTTP is allowed.
+    """
+
+    def __init__(self, inner, serialize):
         self._inner = inner
+        self._serialize = serialize
 
     def chat(self, system, user, max_tokens=512):
-        with _GEN_LOCK:
-            return self._inner.chat(system, user, max_tokens=max_tokens)
+        if self._serialize:
+            with _GEN_LOCK:
+                return self._inner.chat(system, user, max_tokens=max_tokens)
+        return self._inner.chat(system, user, max_tokens=max_tokens)
 
 
 def make_client():
@@ -164,4 +175,6 @@ def make_client():
         inner = _SHARED[backend]
     if inner is None:
         raise LLMUnavailable(f"{backend} previously failed to load")
-    return _SharedClient(inner)
+    # only the in-process HF model needs the serializing lock; the vLLM
+    # server (openai backend) must receive concurrent requests to batch them.
+    return _SharedClient(inner, serialize=(backend == "hf"))

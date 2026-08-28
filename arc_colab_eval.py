@@ -1,85 +1,175 @@
-"""ARC-AGI-3 LLM-agent GPU eval for Google Colab.
+"""ARC-AGI-3 LLM-PRIMARY GPU eval for Google Colab (vLLM + AWQ).
 
-HOW TO USE (Colab, GPU runtime):
-  1. Runtime -> Change runtime type -> GPU (T4/L4/A100).
-  2. Upload arc_kit.zip (Files pane, or run the upload cell).
-  3. Paste this whole file into ONE Colab cell and run it.
-It installs vLLM + arc-agi, serves Qwen2.5-7B, and evaluates the real
-LLM rescue-agent vs the pure programmatic floor on the 25 public games,
-printing both mean scores so we can SEE whether the LLM adds value.
+Tests the real question: does an LLM DRIVING the game (Duck-style) beat the
+programmatic floor on the 25 public games? Because the LLM solves by
+reasoning about the board (not memorised public-game tricks), success here
+is expected to transfer to the 110 private games -- unlike the heuristic
+speed tricks that plateaued at LB 0.27.
 
-Copy the printed RESULT block back to Claude Code.
+HOW TO USE (Colab):
+  1. Runtime -> Change runtime type -> GPU. Prefer **L4** (14B) or **A100**
+     (32B). T4 falls back to a 7B and is only a smoke test.
+  2. Run the cell. It clones the latest code, installs vLLM, serves a
+     quantized Qwen2.5 (AWQ) sized to the GPU, and evaluates the LLM-primary
+     agent vs the programmatic floor.
+  3. Copy the printed RESULT block back to Claude Code.
+
+Everything is auto-generated from this file by build_colab_notebook.py.
 """
-import os, sys, subprocess, time, zipfile, glob, json, threading
+import glob
+import os
+import subprocess
+import sys
+import time
+import urllib.request
 
-def sh(cmd):
-    print("+", cmd); return subprocess.run(cmd, shell=True)
 
-# ---- 0. GPU check --------------------------------------------------------
+def sh(cmd, **kw):
+    print("+", cmd, flush=True)
+    return subprocess.run(cmd, shell=True, **kw)
+
+
+# ---- 0. GPU ---------------------------------------------------------------
 sh("nvidia-smi --query-gpu=name,memory.total --format=csv")
 
-# ---- 1. deps -------------------------------------------------------------
-sh("pip -q install arc-agi accelerate transformers 2>&1 | tail -1")
-
-# ---- 2. get the code + games: clone the repo (always latest) -------------
+# ---- 1. code + games: clone/refresh the repo (always latest) --------------
 REPO = "https://github.com/BDR-Pro/arc-prize-2026-arc-agi-3"
+DEST = "/content/arc-prize-2026-arc-agi-3"
 if os.path.isdir("arc_games"):
     print("running from an existing checkout:", os.getcwd())
-elif os.path.isdir("/content/arc-prize-2026-arc-agi-3/arc_games"):
-    os.chdir("/content/arc-prize-2026-arc-agi-3")
+elif os.path.isdir(DEST + "/arc_games"):
+    os.chdir(DEST)
+    sh("git pull --ff-only")
 else:
-    sh(f"git clone --depth 1 {REPO} /content/arc-prize-2026-arc-agi-3")
-    os.chdir("/content/arc-prize-2026-arc-agi-3")
+    sh(f"git clone --depth 1 {REPO} {DEST}")
+    os.chdir(DEST)
 print("code+games at:", os.getcwd(), "| games:", len(glob.glob("arc_games/*/")))
 
-# ---- 3. pick model by GPU memory ----------------------------------------
+# ---- 2. deps: arc engine + vLLM ------------------------------------------
+sh("pip -q install arc-agi 2>&1 | tail -2")
+sh("pip -q install vllm 2>&1 | tail -3")
+try:
+    import vllm  # noqa: F401
+    print("vLLM version:", vllm.__version__)
+except Exception as e:  # noqa: BLE001
+    print("\n!!! vLLM IMPORT FAILED:", repr(e))
+    print("If this is a Python-version wheel issue, tell Claude the Python "
+          "version:", sys.version)
+    raise SystemExit("vLLM unavailable -- cannot run the LLM-primary eval")
+
+# ---- 3. pick a quantized model by VRAM -----------------------------------
 import torch
+n_gpu = torch.cuda.device_count()
 gb = torch.cuda.get_device_properties(0).total_memory / 1e9
-MODEL = "Qwen/Qwen2.5-7B-Instruct" if gb >= 20 else "Qwen/Qwen2.5-3B-Instruct"
-print(f"GPU {gb:.0f}GB -> model {MODEL}")
+if os.environ.get("ARC_LLM_MODEL"):
+    MODEL = os.environ["ARC_LLM_MODEL"]
+elif gb >= 38:
+    MODEL = "Qwen/Qwen2.5-32B-Instruct-AWQ"
+elif gb >= 21:
+    MODEL = "Qwen/Qwen2.5-14B-Instruct-AWQ"
+elif gb >= 15:
+    MODEL = "Qwen/Qwen2.5-7B-Instruct-AWQ"
+else:
+    MODEL = "Qwen/Qwen2.5-3B-Instruct-AWQ"
+print(f"GPU {gb:.0f}GB x{n_gpu} -> model {MODEL}")
 
-# ---- 4. use transformers on the GPU (sequential eval; no server) --------
-# vLLM is only needed for Kaggle's 110 CONCURRENT games. This Colab eval
-# runs games sequentially, so the transformers backend on the GPU is
-# simpler and works on any Colab GPU including T4. The model is a
-# thread-safe singleton -> it loads once and is reused across all games.
-os.environ["ARC_LLM_BACKEND"] = "hf"
+# ---- 4. launch the vLLM OpenAI server, log to file, poll /health ---------
+PORT = 8000
+LOG = "/content/vllm_server.log"
+cmd = [
+    sys.executable, "-m", "vllm.entrypoints.openai.api_server",
+    "--model", MODEL,
+    "--tensor-parallel-size", str(n_gpu),
+    "--max-model-len", "4096",
+    "--gpu-memory-utilization", "0.90",
+    "--enforce-eager",                 # robust + memory-lean on T4/L4
+    "--port", str(PORT),
+    "--disable-log-requests",
+]
+print("+ launching vLLM server (log ->", LOG + "):")
+print("   " + " ".join(cmd))
+logf = open(LOG, "w")
+server = subprocess.Popen(cmd, stdout=logf, stderr=subprocess.STDOUT)
+
+BASE = f"http://127.0.0.1:{PORT}/v1"
+DEADLINE = time.time() + 1200          # up to 20 min for download + load
+ready = False
+while time.time() < DEADLINE:
+    if server.poll() is not None:
+        print("\n!!! vLLM server EXITED early. Last 40 log lines:")
+        sh(f"tail -40 {LOG}")
+        raise SystemExit("vLLM server died during startup")
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/health",
+                                    timeout=5) as r:
+            if r.status == 200:
+                ready = True
+                break
+    except Exception:                  # noqa: BLE001
+        pass
+    time.sleep(5)
+if not ready:
+    print("\n!!! vLLM server did not become healthy in time. Last 40 lines:")
+    sh(f"tail -40 {LOG}")
+    raise SystemExit("vLLM startup timeout")
+print("vLLM server is HEALTHY.")
+
+# ---- 5. point the agent at the server ------------------------------------
+os.environ["ARC_LLM_BACKEND"] = "openai"
+os.environ["ARC_LLM_BASE_URL"] = BASE
 os.environ["ARC_LLM_MODEL"] = MODEL
-print("backend=hf (transformers, GPU); model loads once on first LLM call")
+os.environ["ARC_LLM_KEY"] = "EMPTY"
+os.environ["ARC_LLM_TIMEOUT"] = "60"
 
-# ---- 5. eval both agents on the 25 games --------------------------------
+# ---- 6. eval floor vs LLM-primary ----------------------------------------
 sys.path.insert(0, os.getcwd())
+MAXACT = int(os.environ.get("ARC_EVAL_MAXACT", "4000"))
+# deployment-realistic: floor opens each level, LLM takes the hard ones
+os.environ.setdefault("ARC_LLM_FLOOR_OPENING", "100")
 
-def eval_agent(agent_path, tag, max_actions=4000):
-    import importlib, eval_harness
+
+def eval_agent(agent_path, tag):
+    import importlib
+    import eval_harness
     importlib.reload(eval_harness)
     from pathlib import Path
     games = sorted(d.name for d in Path("arc_games").iterdir() if d.is_dir())
     tot_score = tot_lv = 0
     per = {}
     for i, g in enumerate(games):
-        r = eval_harness.run_game(g, Path(agent_path), max_actions)
+        r = eval_harness.run_game(g, Path(agent_path), MAXACT)
         lv, sc = r.get("levels_completed", 0), r.get("score", 0.0)
         per[g] = (lv, sc)
-        tot_lv += lv; tot_score += sc
-        print(f"  [{tag}] {i+1}/{len(games)} {g}: lv={lv} score={sc:.3f}", flush=True)
+        tot_lv += lv
+        tot_score += sc
+        print(f"  [{tag}] {i+1}/{len(games)} {g}: lv={lv} score={sc:.3f}",
+              flush=True)
     mean = tot_score / max(len(games), 1)
     print(f"[{tag}] levels={tot_lv} mean={mean:.4f}")
     return tot_lv, mean, per
 
-print("\n=== evaluating programmatic floor (v79) ===")
-p_lv, p_mean, p_per = eval_agent("my_agent.py", "PROG")
-print("\n=== evaluating LLM rescue-agent (real 7B via vLLM) ===")
-l_lv, l_mean, l_per = eval_agent("my_agent_llm.py", "LLM")
 
-print("\n" + "=" * 50)
-print("RESULT (paste this back to Claude Code):")
-print(f"  model={MODEL}")
-print(f"  PROG floor : levels={p_lv} mean={p_mean:.4f}")
-print(f"  LLM agent  : levels={l_lv} mean={l_mean:.4f}")
-print(f"  LLM delta  : {l_mean - p_mean:+.4f} mean, {l_lv - p_lv:+d} levels")
-print("  per-game (game: prog_lv/prog_score -> llm_lv/llm_score) where changed:")
-for g in sorted(p_per):
-    if p_per[g] != l_per[g]:
-        print(f"    {g}: {p_per[g][0]}/{p_per[g][1]:.3f} -> {l_per[g][0]}/{l_per[g][1]:.3f}")
-print("=" * 50)
+try:
+    print("\n=== evaluating programmatic floor (v79) ===")
+    p_lv, p_mean, p_per = eval_agent("my_agent.py", "PROG")
+    print(f"\n=== evaluating LLM-PRIMARY (opening="
+          f"{os.environ['ARC_LLM_FLOOR_OPENING']}, model {MODEL}) ===")
+    l_lv, l_mean, l_per = eval_agent("my_agent_primary.py", "LLM")
+
+    print("\n" + "=" * 52)
+    print("RESULT (paste this back to Claude Code):")
+    print(f"  model={MODEL}  gpu={gb:.0f}GBx{n_gpu}")
+    print(f"  PROG floor  : levels={p_lv} mean={p_mean:.4f}")
+    print(f"  LLM primary : levels={l_lv} mean={l_mean:.4f}")
+    print(f"  LLM delta   : {l_mean - p_mean:+.4f} mean, "
+          f"{l_lv - p_lv:+d} levels")
+    print("  per-game changes (game: prog_lv/score -> llm_lv/score):")
+    for g in sorted(p_per):
+        if p_per[g] != l_per[g]:
+            arrow = "UP" if l_per[g][1] > p_per[g][1] else "DOWN"
+            print(f"    [{arrow}] {g}: {p_per[g][0]}/{p_per[g][1]:.3f} -> "
+                  f"{l_per[g][0]}/{l_per[g][1]:.3f}")
+    print("=" * 52)
+finally:
+    server.terminate()
+    print("vLLM server stopped.")

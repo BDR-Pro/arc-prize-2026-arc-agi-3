@@ -41,7 +41,7 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add my_agent_llm.py arc_colab_eval.ipynb
+          git add my_agent_llm.py my_agent_primary.py arc_colab_eval.ipynb
           if git diff --cached --quiet; then
             echo "no changes to commit"
           else
