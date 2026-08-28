@@ -2416,12 +2416,20 @@ SYSTEM_PROMPT = (
     "You see the board as connected same-color OBJECTS plus an ASCII color "
     "grid, the VALID ACTIONS, your RECENT ACTIONS, and how many cells your "
     "last action changed (0 = it did nothing).\n"
+    "You are given FEEDBACK each turn: how many cells your last action changed "
+    "(0 = it did nothing), the coordinates of your last click and its effect, "
+    "and lists of USELESS actions and DEAD CELLS that changed nothing. USE "
+    "this: never repeat an action or a click that the feedback says did "
+    "nothing -- pick a DIFFERENT action or an UNTRIED cell instead.\n"
     "How to play well:\n"
-    "- First few moves: probe to learn what the actions do (which one moves a "
-    "player object, which interact). An action that changes 0 cells is inert "
-    "in this state; stop repeating it.\n"
+    "- First moves: probe to learn what the actions do. Try EACH movement "
+    "action once and a few DIFFERENT clicks; don't repeat one that changed 0 "
+    "cells. Because each of your turns is expensive, put SEVERAL DIFFERENT "
+    "probes in one plan (e.g. click 5 different objects, or try ACTION1..5), "
+    "then read which ones did something.\n"
     "- Form a hypothesis about the win condition (reach a goal, match a "
-    "pattern, collect/clear objects) and pursue it directly. Do not wander.\n"
+    "pattern, collect/clear objects) and pursue it directly. Do not wander, "
+    "and do not click the same object over and over.\n"
     "- A long thin strip flush against an edge is usually a timer/HUD bar, "
     "NOT clickable pieces. Never click along it segment by segment.\n"
     "- When the goal cell is known but the path isn't, SEARCH: write code that "
@@ -2502,7 +2510,9 @@ class LLMPrimaryAgent(Agent):
         self.level_start_n = 0        # frame index at the last level-up
         self.last_change = None
         self.last_act_name = None     # action executed on the previous frame
+        self.last_click_rc = None     # (row,col) of the last click executed
         self.dead_counts = {}         # simple-action name -> consec no-change
+        self.click_effect = {}        # (row,col) -> last cells-changed by a click
         self.grid_at_query = None     # board snapshot at the last LLM query
         self.floor_only = False       # latched once we hand the game to prog
 
@@ -2545,6 +2555,10 @@ class LLMPrimaryAgent(Agent):
                         self.dead_counts.get(self.last_act_name, 0) + 1
                 else:
                     self.dead_counts[self.last_act_name] = 0
+            elif self.last_click_rc and self.last_click_rc[0] is not None:
+                # remember what clicking THIS cell did (so we can tell the LLM
+                # and stop it re-clicking dead cells)
+                self.click_effect[self.last_click_rc] = self.last_change
 
         score = getattr(latest_frame, "levels_completed", 0) or 0
         if score > self.prev_score:
@@ -2593,6 +2607,15 @@ class LLMPrimaryAgent(Agent):
 
     def _ret(self, action):
         self.last_act_name = getattr(action, "name", None)
+        self.last_click_rc = None
+        try:
+            if action.is_complex():
+                ad = getattr(action, "action_data", None)
+                if ad is not None:
+                    self.last_click_rc = (getattr(ad, "y", None),
+                                          getattr(ad, "x", None))
+        except Exception:                        # noqa: BLE001
+            pass
         return action
 
     # ---- LLM query ---------------------------------------------------
@@ -2604,14 +2627,29 @@ class LLMPrimaryAgent(Agent):
                      for a in avail]
             notes = [f"CURRENT LEVEL {self.prev_score}. "
                      f"LLM calls on this level: {self.calls_this_level}."]
+            if self.last_act_name == "ACTION6" and self.last_click_rc \
+                    and self.last_click_rc[0] is not None:
+                r, c = self.last_click_rc
+                notes.append(f"Your last click was ({r},{c}); it changed "
+                             f"{self.last_change} cells.")
             if stuck:
                 notes.append("!! Your LAST plan changed the board by 0 cells "
                              "-- it did NOTHING. Do something DIFFERENT: a "
-                             "different action, or ACTION6 clicks on specific "
-                             "object centers listed below. Do NOT repeat it.")
+                             "different action or a click on a DIFFERENT cell. "
+                             "Do NOT repeat it.")
             if dead:
-                notes.append("USELESS here (each changed 0 cells every time "
-                             "tried) -- NEVER pick these: " + ", ".join(dead))
+                notes.append("USELESS actions (changed 0 cells every time) -- "
+                             "NEVER pick these: " + ", ".join(dead))
+            # cells already clicked that did nothing -> forbid re-clicking them
+            dead_clicks = sorted(rc for rc, ch in self.click_effect.items()
+                                 if ch == 0)
+            if dead_clicks:
+                shown = ", ".join(f"({r},{c})" for r, c in dead_clicks[:16])
+                more = "" if len(dead_clicks) <= 16 \
+                    else f" (+{len(dead_clicks) - 16} more)"
+                notes.append(f"DEAD CELLS already clicked (changed nothing) -- "
+                             f"do NOT click these again, pick UNTRIED cells: "
+                             f"{shown}{more}")
             obs = "\n".join(notes) + "\n" + render_observation(
                 grid, names, self.history, self.last_change)
             reply = self.client.chat(SYSTEM_PROMPT, obs,
