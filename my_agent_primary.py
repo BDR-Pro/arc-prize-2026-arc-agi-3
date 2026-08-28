@@ -2448,8 +2448,9 @@ class LLMPrimaryAgent(Agent):
     # engages. This protects the floor's cheap/lucky fast wins (ar25 lv0 in
     # 74, vc33 lv0 in 5) -> LLM-primary is then >= floor on easy levels. The
     # LLM only takes levels the floor hasn't cracked in this window (which
-    # were scoring ~0 on efficiency anyway). 0 = pure LLM-capability test.
-    LEVEL_FLOOR_OPENING = _envint("ARC_LLM_FLOOR_OPENING", 0)
+    # were scoring ~0 on efficiency anyway). 100 protects the floor's cheap
+    # wins (ar25 lv0@74, lv1@+52); set 0 to probe raw LLM capability.
+    LEVEL_FLOOR_OPENING = _envint("ARC_LLM_FLOOR_OPENING", 100)
     # stop LLM-driving a level after this many calls with no level-up; the
     # floor brute-forces that level while the LLM stays ready for the next one
     STUCK_CALLS = _envint("ARC_LLM_STUCK_CALLS", 40)
