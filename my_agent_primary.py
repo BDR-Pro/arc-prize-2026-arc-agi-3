@@ -2099,9 +2099,11 @@ def segment(grid: list[list[int]], max_objects: int = 40) -> list[dict]:
             n = 0
             minx = maxx = x0
             miny = maxy = y0
+            cells = []
             while stack:
                 x, y = stack.pop()
                 xs += x; ys += y; n += 1
+                cells.append((x, y))
                 minx = min(minx, x); maxx = max(maxx, x)
                 miny = min(miny, y); maxy = max(maxy, y)
                 for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
@@ -2110,12 +2112,15 @@ def segment(grid: list[list[int]], max_objects: int = 40) -> list[dict]:
                             and grid[ny][nx] == color:
                         seen[ny][nx] = True
                         stack.append((nx, ny))
+            # shape signature: normalized cell offsets -> identical shapes match
+            offsets = tuple(sorted((x - minx, y - miny) for x, y in cells))
             objs.append({
                 "color": LETTERS[color & 0xF],
                 "n": n,
                 "center": [ys // n, xs // n],   # row, col
                 "bbox": [miny, minx, maxy, maxx],
                 "shape": [maxy - miny + 1, maxx - minx + 1],
+                "sig": (LETTERS[color & 0xF], offsets),   # color+shape identity
             })
     objs.sort(key=lambda o: (o["center"][0], o["center"][1]))
     return objs[:max_objects]
@@ -2135,9 +2140,30 @@ def render_observation(grid, valid_actions, history, last_change,
     if last_change is not None:
         lines.append(f"LAST ACTION changed {last_change} cells" if last_change
                      else "LAST ACTION changed nothing visible")
-    lines.append(f"OBJECTS ({len(objs)} non-background components, row,col centers):")
+    # group objects by color+shape identity -> a short group id per shape
+    gid = {}
+    for o in objs:
+        sig = o.get("sig")
+        if sig not in gid:
+            gid[sig] = len(gid)
+    from collections import Counter as _C
+    grp_count = _C(o.get("sig") for o in objs)
+    lines.append(f"OBJECTS ({len(objs)} non-background components; g=shape-"
+                 f"group id, objects with the SAME g are identical shapes):")
     for i, o in enumerate(objs):
-        lines.append(f"  #{i} color {o['color']} size {o['n']} center ({o['center'][0]},{o['center'][1]}) shape {o['shape'][0]}x{o['shape'][1]}")
+        g = gid[o.get("sig")]
+        lines.append(f"  #{i} g{g} color {o['color']} size {o['n']} "
+                     f"center ({o['center'][0]},{o['center'][1]}) "
+                     f"shape {o['shape'][0]}x{o['shape'][1]}")
+    # candidate DESTINATION sets: groups of 2+ identical SMALL objects
+    dests = sorted({g for sig, g in gid.items()
+                    if grp_count[sig] >= 2}, )
+    small_dests = [g for g in dests
+                   if any(gid[o.get("sig")] == g and o["n"] <= 9 for o in objs)]
+    if small_dests:
+        lines.append("CANDIDATE DESTINATION SETS (2+ identical small objects, "
+                     "likely the goal-cover targets): shape-groups " +
+                     ", ".join(f"g{g}" for g in small_dests))
     if history:
         recent = " -> ".join(history[-8:])
         lines.append(f"RECENT ACTIONS: {recent}")
@@ -2409,32 +2435,50 @@ _MODULE_START = time.time()
 
 SYSTEM_PROMPT = (
     "You are playing an unfamiliar 64x64 grid puzzle game, from the start, in "
-    "full control. Your goal is to advance through the levels using AS FEW "
-    "actions as possible: the score is (human_moves / your_moves) squared per "
-    "level, so a level cleared in 40 moves scores ~100x one cleared in 400. "
-    "Wasted or repeated no-op moves are heavily punished.\n"
-    "You see the board as connected same-color OBJECTS plus an ASCII color "
-    "grid, the VALID ACTIONS, your RECENT ACTIONS, and how many cells your "
-    "last action changed (0 = it did nothing).\n"
-    "You are given FEEDBACK each turn: how many cells your last action changed "
-    "(0 = it did nothing), the coordinates of your last click and its effect, "
-    "and lists of USELESS actions and DEAD CELLS that changed nothing. USE "
-    "this: never repeat an action or a click that the feedback says did "
-    "nothing -- pick a DIFFERENT action or an UNTRIED cell instead.\n"
+    "full control.\n"
+    "SCORING: (human_moves / your_moves) squared, awarded ONLY for levels you "
+    "actually CLEAR. A level you never clear scores 0 no matter how many "
+    "actions you spend on it. So: exploring is nearly free on early levels; "
+    "NEVER give up on a level -- clearing it slowly still beats not clearing "
+    "it. Once you understand a level, execute crisply to keep moves low.\n"
+    "COMMON WIN CONDITION (check this FIRST): most of these games are a COVER "
+    "task -- every MOVER object must end up on top of a DESTINATION. The "
+    "destinations are ALREADY on the board from the very first frame: look for "
+    "a group of 2+ objects that are identical (same shape+color), small, and "
+    "STATIC (don't move when you act). Your job becomes: find which action "
+    "moves a mover, then move each mover onto a destination. Variants: remove "
+    "all objects of one color; make a region match a target pattern; cover the "
+    "destinations in a specific order. Reframe from 'what does this button do' "
+    "to 'get each mover onto a destination'.\n"
+    "You see the board as connected same-color OBJECTS (with a shape signature "
+    "so you can spot identical shapes) plus an ASCII color grid, the VALID "
+    "ACTIONS, RECENT ACTIONS, and WHAT YOU'VE LEARNED so far.\n"
+    "FEEDBACK each turn: how many cells your last action changed (0 = nothing), "
+    "your last click's coords + effect, and lists of USELESS actions / DEAD "
+    "cells. Never repeat something the feedback says did nothing.\n"
+    "MOUSE (ACTION6 row col) clicks one of 4096 cells. The real controls are "
+    "usually only a FEW scattered cells -- do NOT sample the board evenly. "
+    "Click DELIBERATELY on object centers and small isolated markers. A cell "
+    "you've clicked with no effect is dead; never click it again.\n"
     "How to play well:\n"
-    "- First moves: probe to learn what the actions do. Try EACH movement "
-    "action once and a few DIFFERENT clicks; don't repeat one that changed 0 "
-    "cells. Because each of your turns is expensive, put SEVERAL DIFFERENT "
-    "probes in one plan (e.g. click 5 different objects, or try ACTION1..5), "
-    "then read which ones did something.\n"
-    "- Form a hypothesis about the win condition (reach a goal, match a "
-    "pattern, collect/clear objects) and pursue it directly. Do not wander, "
-    "and do not click the same object over and over.\n"
+    "- First moves: probe efficiently -- try EACH movement action once and a "
+    "few DIFFERENT deliberate clicks in ONE plan, then read which did "
+    "something. Don't repeat a 0-change action/cell.\n"
+    "- Then pursue the cover hypothesis directly. Do not wander, and do not "
+    "click the same object over and over.\n"
     "- A long thin strip flush against an edge is usually a timer/HUD bar, "
     "NOT clickable pieces. Never click along it segment by segment.\n"
     "- When the goal cell is known but the path isn't, SEARCH: write code that "
     "computes the move sequence.\n"
-    "Reply with EXACTLY ONE of these two formats, nothing else:\n"
+    "MEMORY -- most important: end EVERY reply with a line:\n"
+    "LEARNED: <one short sentence stating any NEW mechanic you just confirmed, "
+    "e.g. 'ACTION2 moves the red block down' or 'clicking a small green marker "
+    "teleports the mover there'. Say 'none' if nothing new.>\n"
+    "These notes are the ONLY thing that carries across turns and levels, so "
+    "keep them accurate and about MECHANICS (not this level's exact layout, "
+    "which changes next level).\n"
+    "Reply with EXACTLY ONE of these two action formats, then the LEARNED "
+    "line:\n"
     "1) Direct:\n"
     "PLAN: <one short line of intent>\n"
     "ACTIONS: <comma list, e.g. ACTION2, ACTION2, ACTION6 12 30>\n"
@@ -2455,6 +2499,7 @@ SYSTEM_PROMPT = (
 _ACT_RE = re.compile(r"ACTION\s*([1-7])(?:\s+(\d+)\s+(\d+))?", re.I)
 _RESET_RE = re.compile(r"\bRESET\b", re.I)
 _CODE_RE = re.compile(r"```(?:python)?\s*(.+?)```", re.S | re.I)
+_LEARNED_RE = re.compile(r"LEARNED:\s*(.+)", re.I)
 
 _SAFE_BUILTINS = {
     "range": range, "len": len, "min": min, "max": max, "abs": abs,
@@ -2515,6 +2560,7 @@ class LLMPrimaryAgent(Agent):
         self.click_effect = {}        # (row,col) -> last cells-changed by a click
         self.click_count = {}         # (row,col) -> times clicked
         self._banned_cells = set()    # cells the LLM may not click any more
+        self.world_notes = []         # learned MECHANICS (persist across levels)
         self.grid_at_query = None     # board snapshot at the last LLM query
         self.floor_only = False       # latched once we hand the game to prog
 
@@ -2609,6 +2655,23 @@ class LLMPrimaryAgent(Agent):
         return self._ret(prog_choice if prog_choice is not None
                          else self._safe_default(latest_frame))
 
+    def _absorb_learned(self, reply) -> None:
+        # capture the model's LEARNED: line -> persistent mechanics memory.
+        # This is the cross-level knowledge the naive agent lacked; it is NOT
+        # cleared on level-up (mechanics carry over even when layout resets).
+        m = _LEARNED_RE.search(reply or "")
+        if not m:
+            return
+        note = " ".join(m.group(1).split())[:160].strip(" .")
+        if not note or note.lower() in ("none", "n/a", "nothing", "nothing new"):
+            return
+        low = note.lower()
+        if any(low == n.lower() for n in self.world_notes):
+            return
+        self.world_notes.append(note)
+        if len(self.world_notes) > 12:          # keep the most recent mechanics
+            self.world_notes = self.world_notes[-12:]
+
     def _ret(self, action):
         self.last_act_name = getattr(action, "name", None)
         self.last_click_rc = None
@@ -2657,10 +2720,14 @@ class LLMPrimaryAgent(Agent):
                 notes.append(f"BANNED cells (dead, or already clicked enough) "
                              f"-- clicks on these are IGNORED, so pick UNTRIED "
                              f"cells: {shown}{more}")
+            if self.world_notes:
+                notes.append("WHAT YOU'VE LEARNED (mechanics, persists across "
+                             "levels):\n- " + "\n- ".join(self.world_notes))
             obs = "\n".join(notes) + "\n" + render_observation(
                 grid, names, self.history, self.last_change)
             reply = self.client.chat(SYSTEM_PROMPT, obs,
                                      max_tokens=self.MAX_TOKENS)
+            self._absorb_learned(reply)
             q = self._from_code(reply, grid, avail)
             if not q:
                 q = self._parse(reply, avail)

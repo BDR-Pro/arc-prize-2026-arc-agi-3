@@ -38,9 +38,11 @@ def segment(grid: list[list[int]], max_objects: int = 40) -> list[dict]:
             n = 0
             minx = maxx = x0
             miny = maxy = y0
+            cells = []
             while stack:
                 x, y = stack.pop()
                 xs += x; ys += y; n += 1
+                cells.append((x, y))
                 minx = min(minx, x); maxx = max(maxx, x)
                 miny = min(miny, y); maxy = max(maxy, y)
                 for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
@@ -49,12 +51,15 @@ def segment(grid: list[list[int]], max_objects: int = 40) -> list[dict]:
                             and grid[ny][nx] == color:
                         seen[ny][nx] = True
                         stack.append((nx, ny))
+            # shape signature: normalized cell offsets -> identical shapes match
+            offsets = tuple(sorted((x - minx, y - miny) for x, y in cells))
             objs.append({
                 "color": LETTERS[color & 0xF],
                 "n": n,
                 "center": [ys // n, xs // n],   # row, col
                 "bbox": [miny, minx, maxy, maxx],
                 "shape": [maxy - miny + 1, maxx - minx + 1],
+                "sig": (LETTERS[color & 0xF], offsets),   # color+shape identity
             })
     objs.sort(key=lambda o: (o["center"][0], o["center"][1]))
     return objs[:max_objects]
@@ -74,9 +79,30 @@ def render_observation(grid, valid_actions, history, last_change,
     if last_change is not None:
         lines.append(f"LAST ACTION changed {last_change} cells" if last_change
                      else "LAST ACTION changed nothing visible")
-    lines.append(f"OBJECTS ({len(objs)} non-background components, row,col centers):")
+    # group objects by color+shape identity -> a short group id per shape
+    gid = {}
+    for o in objs:
+        sig = o.get("sig")
+        if sig not in gid:
+            gid[sig] = len(gid)
+    from collections import Counter as _C
+    grp_count = _C(o.get("sig") for o in objs)
+    lines.append(f"OBJECTS ({len(objs)} non-background components; g=shape-"
+                 f"group id, objects with the SAME g are identical shapes):")
     for i, o in enumerate(objs):
-        lines.append(f"  #{i} color {o['color']} size {o['n']} center ({o['center'][0]},{o['center'][1]}) shape {o['shape'][0]}x{o['shape'][1]}")
+        g = gid[o.get("sig")]
+        lines.append(f"  #{i} g{g} color {o['color']} size {o['n']} "
+                     f"center ({o['center'][0]},{o['center'][1]}) "
+                     f"shape {o['shape'][0]}x{o['shape'][1]}")
+    # candidate DESTINATION sets: groups of 2+ identical SMALL objects
+    dests = sorted({g for sig, g in gid.items()
+                    if grp_count[sig] >= 2}, )
+    small_dests = [g for g in dests
+                   if any(gid[o.get("sig")] == g and o["n"] <= 9 for o in objs)]
+    if small_dests:
+        lines.append("CANDIDATE DESTINATION SETS (2+ identical small objects, "
+                     "likely the goal-cover targets): shape-groups " +
+                     ", ".join(f"g{g}" for g in small_dests))
     if history:
         recent = " -> ".join(history[-8:])
         lines.append(f"RECENT ACTIONS: {recent}")
