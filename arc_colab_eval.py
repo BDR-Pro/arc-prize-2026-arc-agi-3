@@ -21,17 +21,16 @@ sh("nvidia-smi --query-gpu=name,memory.total --format=csv")
 # ---- 1. deps -------------------------------------------------------------
 sh("pip -q install vllm==0.6.3.post1 arc-agi 2>/dev/null || pip -q install vllm arc-agi")
 
-# ---- 2. unpack the kit (expects /content/arc_kit.zip) --------------------
-KIT = "/content/arc_kit.zip"
-if not os.path.exists(KIT):
-    from google.colab import files  # type: ignore
-    print("Upload arc_kit.zip:")
-    up = files.upload(); KIT = list(up.keys())[0]
-os.makedirs("/content/arc", exist_ok=True)
-with zipfile.ZipFile(KIT) as z:
-    z.extractall("/content/arc")
-os.chdir("/content/arc")
-print("unpacked:", os.listdir("."))
+# ---- 2. get the code + games: clone the repo (always latest) -------------
+REPO = "https://github.com/BDR-Pro/arc-prize-2026-arc-agi-3"
+if os.path.isdir("arc_games"):
+    print("running from an existing checkout:", os.getcwd())
+elif os.path.isdir("/content/arc-prize-2026-arc-agi-3/arc_games"):
+    os.chdir("/content/arc-prize-2026-arc-agi-3")
+else:
+    sh(f"git clone --depth 1 {REPO} /content/arc-prize-2026-arc-agi-3")
+    os.chdir("/content/arc-prize-2026-arc-agi-3")
+print("code+games at:", os.getcwd(), "| games:", len(glob.glob("arc_games/*/")))
 
 # ---- 3. pick model by GPU memory ----------------------------------------
 import torch

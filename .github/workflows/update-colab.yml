@@ -1,0 +1,49 @@
+name: Update Colab runbook
+
+# On every push that touches the agent code, rebuild the single-file
+# bundle and regenerate the Colab eval notebook, then commit them back so
+# the Colab runbook (which clones this repo) always runs the latest agent.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "my_agent.py"
+      - "llm/**"
+      - "arc_colab_eval.py"
+      - "build_llm_bundle.py"
+      - "build_colab_notebook.py"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-colab
+  cancel-in-progress: true
+
+jobs:
+  regen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Regenerate bundle + Colab notebook
+        run: |
+          python build_llm_bundle.py
+          python build_colab_notebook.py
+
+      - name: Commit regenerated artifacts if changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add my_agent_llm.py arc_colab_eval.ipynb
+          if git diff --cached --quiet; then
+            echo "no changes to commit"
+          else
+            git commit -m "CI: regenerate LLM bundle + Colab notebook [skip ci]"
+            git push
+          fi
