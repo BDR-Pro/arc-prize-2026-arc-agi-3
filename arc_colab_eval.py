@@ -42,27 +42,34 @@ else:
 print("code+games at:", os.getcwd(), "| games:", len(glob.glob("arc_games/*/")))
 
 # ---- 2. deps: arc engine + transformers stack ----------------------------
-sh("pip -q install arc-agi transformers accelerate 2>&1 | tail -2")
-sh("pip -q install autoawq 2>&1 | tail -2")   # for 4-bit AWQ models
-try:
-    import awq  # noqa: F401
-    AWQ_OK = True
-except Exception as e:  # noqa: BLE001
-    AWQ_OK = False
-    print("autoawq unavailable ->", repr(e), "(will use an unquantized model)")
+sh("pip -q install arc-agi transformers accelerate bitsandbytes 2>&1 | tail -2")
+# Colab (py3.13) ships a torchvision that imports a BROKEN Pillow
+# (PIL.ImageText -> _Ink). transformers imports torchvision eagerly via its
+# object-detection loss modules, so even a TEXT model load dies there. A text
+# LLM needs neither torchvision nor PIL -> remove torchvision so transformers
+# skips the vision import path.
+sh("pip -q uninstall -y torchvision 2>&1 | tail -1")
+# drop any already-imported broken modules from a warm kernel so the fresh
+# import below sees torchvision as absent (no runtime restart needed)
+for _m in [m for m in list(sys.modules)
+           if m.split(".")[0] in ("torchvision", "transformers", "PIL")]:
+    sys.modules.pop(_m, None)
 
-# ---- 3. pick model by VRAM (+ AWQ availability) --------------------------
+# ---- 3. pick model by VRAM (bitsandbytes 4-bit for the bigger models) ----
 import torch
 gb = torch.cuda.get_device_properties(0).total_memory / 1e9
 if os.environ.get("ARC_LLM_MODEL"):
     MODEL = os.environ["ARC_LLM_MODEL"]
-elif AWQ_OK and gb >= 20:
-    MODEL = "Qwen/Qwen2.5-14B-Instruct-AWQ"       # ~9GB, best capability here
 elif gb >= 20:
-    MODEL = "Qwen/Qwen2.5-7B-Instruct"            # fp16 ~14GB, fits L4/A100
+    MODEL = "Qwen/Qwen2.5-14B-Instruct"           # 4-bit ~8.5GB, fits L4/A100
+    os.environ["ARC_LLM_LOAD_4BIT"] = "1"
+elif gb >= 12:
+    MODEL = "Qwen/Qwen2.5-7B-Instruct"            # 4-bit ~5GB, fits T4
+    os.environ["ARC_LLM_LOAD_4BIT"] = "1"
 else:
-    MODEL = "Qwen/Qwen2.5-3B-Instruct"            # T4 fallback
-print(f"GPU {gb:.0f}GB | autoawq={AWQ_OK} -> model {MODEL}")
+    MODEL = "Qwen/Qwen2.5-3B-Instruct"            # tiny fallback, fp16
+print(f"GPU {gb:.0f}GB -> model {MODEL} "
+      f"(4bit={os.environ.get('ARC_LLM_LOAD_4BIT', '0')})")
 
 # ---- 4. backend=hf; PRELOAD the model once and warm-test it --------------
 sys.path.insert(0, os.getcwd())
@@ -87,6 +94,7 @@ try:
     print("warm-up reply:", repr(preload(MODEL)))
 except Exception as e:  # noqa: BLE001
     print("!!! model load FAILED:", repr(e), "-> falling back to 7B fp16")
+    os.environ.pop("ARC_LLM_LOAD_4BIT", None)   # pure fp16, most robust
     MODEL = "Qwen/Qwen2.5-7B-Instruct"
     print("warm-up reply:", repr(preload(MODEL)))
 print("model ready:", MODEL)

@@ -2240,7 +2240,19 @@ class HFLocalLLM:
             import torch
             self._cuda = torch.cuda.is_available()
             self.tok = AutoTokenizer.from_pretrained(self.model_id)
-            if self._cuda:
+            load_4bit = bool(os.environ.get("ARC_LLM_LOAD_4BIT")) and self._cuda
+            if load_4bit:
+                # 4-bit lets a 14B (~8.5GB) fit a 24GB L4; robust vs AWQ
+                from transformers import BitsAndBytesConfig
+                bnb = BitsAndBytesConfig(
+                    load_in_4bit=True,
+                    bnb_4bit_quant_type="nf4",
+                    bnb_4bit_compute_dtype=torch.float16,
+                    bnb_4bit_use_double_quant=True)
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.model_id, quantization_config=bnb,
+                    device_map="auto")
+            elif self._cuda:
                 # shard across available GPUs (7B fp16 ~14GB); fp16 on GPU
                 self.model = AutoModelForCausalLM.from_pretrained(
                     self.model_id, torch_dtype=torch.float16,
