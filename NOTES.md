@@ -597,3 +597,39 @@ PENDING: user runs arc_colab_eval.ipynb on L4(14B)/A100(32B) and pastes the
 RESULT block. Decision: LLM-primary mean > floor 0.4059 -> port to Kaggle;
 else tune prompt/model. (Public-game mean IS a valid signal now because the
 LLM's skill is general, unlike the shelved heuristic tricks.)
+
+
+## DUCK-STYLE VERDICT: 32B nets FLAT vs floor (2026-08-29)
+Full 25-game Colab eval, Qwen2.5-32B-Instruct (4-bit, A100 40GB), LLM-primary
+with the improved loop (click-memory + ban over-clicked cells + diverse
+probing):
+  PROG floor  : 16 levels, mean 0.4058
+  LLM primary : 15 levels, mean 0.4044  (delta -0.0014, -1 level)
+KILLER STAT: of the 14 games the floor scores 0 on, the 32B cracked exactly
+ONE (cd82 -> 0.006). The other 13 true-zeros stayed 0. It also REGRESSED 8
+games the floor handles (m0r0 .053->.004, tu93 .042->.003, sp80, r11l, vc33,
+cn04, g50t, ls20) by disrupting the floor's efficient path. Wins (cd82, ft09
++0.002, lp85 lv2->lv3 +0.089) are cancelled by the regressions -> net ~0.
+
+ROOT CAUSE (visible in every game's [LLMq] log): the model never graduates
+from "probe actions and objects" to a real win-hypothesis. It has no memory
+of what it learned across turns (only the current frame + last-change + dead
+cells), so it explores forever and never exploits. A 32B clicking a 64x64
+grid does not reverse-engineer these games' mechanics. This is a model-
+capability wall on our hardware, not a patchable bug.
+
+PROGRESSION TESTED: 3B rescue (+0.000, inert) -> 7B primary (flails, spams
+one dead move) -> 32B primary + click-memory + ban (systematic exploration,
+but still net-flat). Each rung better behaved, none beats the floor.
+
+DEPLOYMENT WALL (independent of the above): vLLM would not start on Colab
+py3.13 (native crash); 32B x 110 concurrent games each doing ~40 x ~10s
+calls almost certainly exceeds the Kaggle rerun window (each game's LLM phase
+took 5-7 min here). The Duck's LB 3 needs 27B+ on H100 + a richer harness --
+out of reach on Kaggle 2xT4.
+
+DECISION: BANK THE v79 FLOOR (LB 0.26). The Duck-style LLM route is tested
+exhaustively and does not beat the floor. Optional last step: a "protect +
+rescue" config (floor keeps every game it can solve; improved LLM engages
+ONLY on truly-stuck games) to bank cd82+lp85 without regressions -- a small
+local gain, no LB story. Daily auto-submit stays on the safe floor.
