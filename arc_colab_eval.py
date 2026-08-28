@@ -64,8 +64,11 @@ import torch
 gb = torch.cuda.get_device_properties(0).total_memory / 1e9
 if os.environ.get("ARC_LLM_MODEL"):
     MODEL = os.environ["ARC_LLM_MODEL"]
+elif gb >= 38:
+    MODEL = "Qwen/Qwen2.5-32B-Instruct"           # 4-bit ~19GB, best on A100
+    os.environ["ARC_LLM_LOAD_4BIT"] = "1"
 elif gb >= 20:
-    MODEL = "Qwen/Qwen2.5-14B-Instruct"           # 4-bit ~8.5GB, fits L4/A100
+    MODEL = "Qwen/Qwen2.5-14B-Instruct"           # 4-bit ~8.5GB, fits L4
     os.environ["ARC_LLM_LOAD_4BIT"] = "1"
 elif gb >= 12:
     MODEL = "Qwen/Qwen2.5-7B-Instruct"            # 4-bit ~5GB, fits T4
