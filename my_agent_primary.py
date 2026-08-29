@@ -2484,16 +2484,21 @@ SYSTEM_PROMPT = (
     "ACTIONS: <comma list, e.g. ACTION2, ACTION2, ACTION6 12 30>\n"
     "   (ACTION6 is a click and needs 'ACTION6 <row> <col>'.)\n"
     "2) Code (prefer when search/computation helps): a single fenced python "
-    "block. You are given `grid` (list[list[int]] rows), `objects` (dicts with "
-    "color,n,center=[row,col],bbox,shape), `valid` (action-name strings), and "
-    "you MUST assign a list `plan`, each item 'ACTIONX' or ('ACTION6', row, "
-    "col). Example:\n"
+    "block. Bound names: `grid` (list[list[int]] rows), `objects` (dicts with "
+    "color,n,center=[row,col],bbox,shape), `valid` (action-name strings), "
+    "`banned_cells` (set of dead (row,col) that do nothing -- skip them), "
+    "`clicked` (set of already-clicked (row,col)). You MUST assign a list "
+    "`plan`; each item is a move string like 'ACTION2' or a click ('ACTION6', "
+    "row, col). Example:\n"
     "```python\n"
-    "# click the smallest object\n"
-    "o = min(objects, key=lambda o: o['n'])\n"
+    "# click the smallest untried object\n"
+    "cand = [o for o in objects if tuple(o['center']) not in banned_cells]\n"
+    "o = min(cand, key=lambda o: o['n'])\n"
     "plan = [('ACTION6', o['center'][0], o['center'][1])]\n"
     "```\n"
-    "Keep each plan <= 8 actions so you can watch the result and adapt."
+    "Re-clicking a cell that KEEPS changing the board is GOOD -- that is how "
+    "you push a mover step by step onto its destination; only avoid cells in "
+    "banned_cells. Keep each plan <= 8 actions so you can watch the result."
 )
 
 _ACT_RE = re.compile(r"ACTION\s*([1-7])(?:\s+(\d+)\s+(\d+))?", re.I)
@@ -2561,6 +2566,7 @@ class LLMPrimaryAgent(Agent):
         self.click_count = {}         # (row,col) -> times clicked
         self._banned_cells = set()    # cells the LLM may not click any more
         self.world_notes = []         # learned MECHANICS (persist across levels)
+        self.last_change_bbox = None  # region of the last action's change
         self.grid_at_query = None     # board snapshot at the last LLM query
         self.floor_only = False       # latched once we hand the game to prog
 
@@ -2584,11 +2590,18 @@ class LLMPrimaryAgent(Agent):
                              else GameAction.RESET)
 
         grid = self._grid(latest_frame)
-        # measure what our previous action did
+        # measure what our previous action did -- count AND where (bbox), so
+        # the model can infer WHAT moved and in which direction
         if self.prev_grid and grid and len(self.prev_grid) == len(grid):
-            self.last_change = sum(
-                1 for r0, r1 in zip(self.prev_grid, grid)
-                for a, b in zip(r0, r1) if a != b)
+            changed = [(r, c)
+                       for r, (r0, r1) in enumerate(zip(self.prev_grid, grid))
+                       for c, (a, b) in enumerate(zip(r0, r1)) if a != b]
+            self.last_change = len(changed)
+            if changed:
+                rs = [p[0] for p in changed]; cs = [p[1] for p in changed]
+                self.last_change_bbox = (min(rs), min(cs), max(rs), max(cs))
+            else:
+                self.last_change_bbox = None
         self.prev_grid = grid
         # attribute the change to the previously-executed action; a simple
         # (non-click) action that repeatedly changes nothing is inert here
@@ -2699,6 +2712,11 @@ class LLMPrimaryAgent(Agent):
                 r, c = self.last_click_rc
                 notes.append(f"Your last click was ({r},{c}); it changed "
                              f"{self.last_change} cells.")
+            if self.last_change and self.last_change_bbox:
+                r1, c1, r2, c2 = self.last_change_bbox
+                notes.append(f"Those changes were in the region rows {r1}-{r2}, "
+                             f"cols {c1}-{c2} -- compare to your action to infer "
+                             f"WHICH object moved and in which direction.")
             if stuck:
                 notes.append("!! Your LAST plan changed the board by 0 cells "
                              "-- it did NOTHING. Do something DIFFERENT: a "
@@ -2707,19 +2725,19 @@ class LLMPrimaryAgent(Agent):
             if dead:
                 notes.append("USELESS actions (changed 0 cells every time) -- "
                              "NEVER pick these: " + ", ".join(dead))
-            # cells that changed nothing, OR were clicked 3+ times already ->
-            # banned. Re-clicking teaches nothing; force the model elsewhere.
-            self._banned_cells = {
-                rc for rc, ch in self.click_effect.items() if ch == 0
-            } | {rc for rc, n in self.click_count.items() if n >= 3}
+            # ban ONLY dead cells (clicking them changed 0 cells). Do NOT ban
+            # productive cells by click-count: re-clicking a cell that keeps
+            # changing the board is how you push a mover step by step toward
+            # its destination -- banning those blocks the actual solution.
+            self._banned_cells = {rc for rc, ch in self.click_effect.items()
+                                  if ch == 0}
             if self._banned_cells:
                 banned = sorted(self._banned_cells)
                 shown = ", ".join(f"({r},{c})" for r, c in banned[:16])
                 more = "" if len(banned) <= 16 \
                     else f" (+{len(banned) - 16} more)"
-                notes.append(f"BANNED cells (dead, or already clicked enough) "
-                             f"-- clicks on these are IGNORED, so pick UNTRIED "
-                             f"cells: {shown}{more}")
+                notes.append(f"DEAD cells (clicking changed 0 cells) -- clicks "
+                             f"on these are IGNORED, pick others: {shown}{more}")
             if self.world_notes:
                 notes.append("WHAT YOU'VE LEARNED (mechanics, persists across "
                              "levels):\n- " + "\n- ".join(self.world_notes))
@@ -2747,8 +2765,20 @@ class LLMPrimaryAgent(Agent):
             return deque()
         code = m.group(1)
         objs = segment(grid)
+        # the model routinely writes `... not in banned_cells` / `BANNED`;
+        # provide them (a set of dead (row,col)) so its filter code runs
+        # instead of raising NameError -> empty plan -> wasted call
+        banned = set(self._banned_cells)
         env = {"grid": grid, "objects": objs,
-               "valid": [a.name for a in avail], "plan": []}
+               "valid": [a.name for a in avail], "plan": [],
+               "banned_cells": banned, "BANNED": banned, "dead_cells": banned,
+               "clicked": set(self.click_effect.keys())}
+        # the model often writes bare ACTION1 / ACTION6(r,c) in code (not
+        # quoted) -> NameError. Bind them: moves as strings, the click as a
+        # callable so ACTION6(r,c) and ('ACTION6',r,c) both work.
+        for _i in (1, 2, 3, 4, 5, 7):
+            env[f"ACTION{_i}"] = f"ACTION{_i}"
+        env["ACTION6"] = lambda r, c: ("ACTION6", r, c)
         try:
             exec(compile(code, "<llm>", "exec"),  # noqa: S102
                  {"__builtins__": _SAFE_BUILTINS}, env)
